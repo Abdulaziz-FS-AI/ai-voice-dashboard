@@ -8,7 +8,7 @@ type Page = 'login' | 'dashboard' | 'editor';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('login');
-  const [agentConfig, setAgentConfig] = useState<any>(null);
+  const [, setAgentConfig] = useState<any>(null);
 
   const handleLogin = () => {
     setCurrentPage('dashboard');

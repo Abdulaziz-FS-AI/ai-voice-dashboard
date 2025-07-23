@@ -109,7 +109,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
-        <h1>Call Analytics Dashboard</h1>
+        <div className="header-logo">
+          <img 
+            src="/voice-matrix-logo.png" 
+            alt="Voice Matrix" 
+            className="dashboard-logo"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          <div className="header-title">
+            <h1>Voice Matrix Dashboard</h1>
+            <span className="dashboard-subtitle">Call Analytics & Management</span>
+          </div>
+        </div>
         <div className="header-controls">
           <select 
             value={selectedPeriod} 

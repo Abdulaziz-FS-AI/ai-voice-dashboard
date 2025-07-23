@@ -25,8 +25,8 @@ interface VoiceAgentEditorProps {
 
 const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate }) => {
   const [config, setConfig] = useState<AgentConfig>({
-    companyName: '',
-    welcomeMessage: '',
+    companyName: 'Voice Matrix',
+    welcomeMessage: 'Hello! Welcome to Voice Matrix. How can our AI assistant help you today?',
     voiceGender: 'female',
     voiceAccent: 'american',
     personality: 'professional',
@@ -104,7 +104,20 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
   return (
     <div className="voice-editor-container">
       <div className="editor-header">
-        <h1>AI Voice Agent Configuration</h1>
+        <div className="header-logo">
+          <img 
+            src="/voice-matrix-logo.png" 
+            alt="Voice Matrix" 
+            className="editor-logo"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          <div className="header-title">
+            <h1>Voice Matrix Agent Configuration</h1>
+            <span className="editor-subtitle">Customize Your AI Assistant</span>
+          </div>
+        </div>
         <div className="header-buttons">
           <button className="nav-button" onClick={() => onNavigate('dashboard')}>
             Dashboard

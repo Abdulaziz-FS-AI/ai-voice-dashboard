@@ -10,12 +10,6 @@ const PinLogin: React.FC<PinLoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const CORRECT_PIN = '123456';
 
-  const handlePinChange = (value: string) => {
-    if (value.length <= 6) {
-      setPin(value);
-      setError('');
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +41,18 @@ const PinLogin: React.FC<PinLoginProps> = ({ onLogin }) => {
   return (
     <div className="pin-login-container">
       <div className="pin-login-card">
-        <h2>AI Voice Dashboard</h2>
+        <div className="logo-container">
+          <img 
+            src="/voice-matrix-logo.png" 
+            alt="Voice Matrix - Artificial Intelligence" 
+            className="logo"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
+        <h2>Voice Matrix</h2>
+        <p className="tagline">Artificial Intelligence</p>
         <p>Enter your PIN to access the dashboard</p>
         
         <form onSubmit={handleSubmit}>
