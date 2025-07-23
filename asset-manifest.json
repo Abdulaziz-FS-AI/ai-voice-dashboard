@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/ai-voice-dashboard/static/css/main.93c7032b.css",
+    "main.js": "/ai-voice-dashboard/static/js/main.b3d54010.js",
+    "static/js/453.36b441ed.chunk.js": "/ai-voice-dashboard/static/js/453.36b441ed.chunk.js",
+    "index.html": "/ai-voice-dashboard/index.html",
+    "main.93c7032b.css.map": "/ai-voice-dashboard/static/css/main.93c7032b.css.map",
+    "main.b3d54010.js.map": "/ai-voice-dashboard/static/js/main.b3d54010.js.map",
+    "453.36b441ed.chunk.js.map": "/ai-voice-dashboard/static/js/453.36b441ed.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.93c7032b.css",
+    "static/js/main.b3d54010.js"
+  ]
+}
