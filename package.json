@@ -1,7 +1,7 @@
 {
   "name": "ai-voice-dashboard",
   "version": "0.1.0",
-  "homepage": "https://YOUR_USERNAME.github.io/ai-voice-dashboard",
+  "homepage": "https://Abdulaziz-FS-AI.github.io/ai-voice-dashboard",
   "private": true,
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
