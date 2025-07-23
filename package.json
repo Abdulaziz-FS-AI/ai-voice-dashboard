@@ -1,7 +1,6 @@
 {
   "name": "ai-voice-dashboard",
   "version": "0.1.0",
-  "homepage": "https://Abdulaziz-FS-AI.github.io/ai-voice-dashboard",
   "private": true,
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
@@ -23,10 +22,12 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "build:ec2": "PUBLIC_URL='' react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "deploy:ec2": "npm run build:ec2"
   },
   "eslintConfig": {
     "extends": [
