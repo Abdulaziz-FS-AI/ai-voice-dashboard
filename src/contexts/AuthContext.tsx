@@ -15,6 +15,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Clear any cached authentication data that might be using old client ID
+    const clearOldAuthCache = () => {
+      const keysToCheck = Object.keys(localStorage).filter(key => 
+        key.includes('amplify') || key.includes('cognito') || key.includes('7645g8ltvu8mqc3sobft1ns2pa')
+      );
+      if (keysToCheck.length > 0) {
+        console.log('Clearing old authentication cache...');
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+    };
+    
+    clearOldAuthCache();
     checkAuthState();
     
     // Listen for auth events

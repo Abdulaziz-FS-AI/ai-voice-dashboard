@@ -6,6 +6,10 @@ import reportWebVitals from './reportWebVitals';
 import { Amplify } from 'aws-amplify';
 import awsconfig from './aws-exports';
 
+console.log('🔧 Amplify Configuration:');
+console.log('Client ID:', awsconfig.Auth.Cognito.userPoolClientId);
+console.log('Pool ID:', awsconfig.Auth.Cognito.userPoolId);
+
 Amplify.configure(awsconfig);
 
 const root = ReactDOM.createRoot(

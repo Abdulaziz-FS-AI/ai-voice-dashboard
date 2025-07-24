@@ -31,4 +31,6 @@ backend/samconfig.toml
 
 # Large dependency files that may contain secrets
 backend/node_modules/
+backend/src/node_modules/
 backend/package-lock.json
+backend/src/package-lock.json
