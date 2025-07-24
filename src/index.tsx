@@ -9,8 +9,32 @@ import awsconfig from './aws-exports';
 console.log('🔧 Amplify Configuration:');
 console.log('Client ID:', awsconfig.Auth.Cognito.userPoolClientId);
 console.log('Pool ID:', awsconfig.Auth.Cognito.userPoolId);
+console.log('Full config:', JSON.stringify(awsconfig, null, 2));
 
-Amplify.configure(awsconfig);
+// Clear any existing Amplify cache before configuring
+console.log('🧹 Clearing Amplify cache...');
+localStorage.removeItem('aws-amplify-cache');
+sessionStorage.removeItem('aws-amplify-cache');
+
+// Clear all keys that might contain old auth data
+Object.keys(localStorage).forEach(key => {
+  if (key.includes('amplify') || key.includes('cognito') || key.includes('7645g8ltvu8mqc3sobft1ns2pa')) {
+    console.log('🗑️  Removing cached key:', key);
+    localStorage.removeItem(key);
+  }
+});
+
+// Force a complete reconfiguration
+try {
+  Amplify.configure(awsconfig);
+  console.log('✅ Amplify configured with new client ID');
+  
+  // Verify configuration took effect
+  const currentConfig = Amplify.getConfig();
+  console.log('🔍 Verification - Current client ID:', currentConfig.Auth?.Cognito?.userPoolClientId);
+} catch (error) {
+  console.error('❌ Amplify configuration failed:', error);
+}
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

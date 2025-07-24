@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signIn, signUp, confirmSignUp, resetPassword, confirmResetPassword } from 'aws-amplify/auth';
+import { forceAuthReset, isUsingOldClientId } from '../utils/authReset';
 import './CustomAuth.css';
 
 interface CustomAuthProps {
@@ -21,15 +22,35 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
 
+  useEffect(() => {
+    // Check if we need to reset due to old client ID
+    if (isUsingOldClientId()) {
+      console.log('🚨 Detected old client ID, forcing reset...');
+      forceAuthReset().catch(console.error);
+    }
+  }, []);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     
     try {
-      await signIn({ username: email, password });
+      console.log('🔐 Attempting sign in with:', { email });
+      
+      // Force a complete reset before attempting sign in
+      await forceAuthReset();
+      
+      const result = await signIn({ username: email, password });
+      console.log('✅ Sign in successful:', result);
       onSuccess();
     } catch (err: any) {
+      console.error('❌ Sign in error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        code: err.code,
+        name: err.name
+      });
       setError(err.message || 'Sign in failed');
     }
     setLoading(false);
