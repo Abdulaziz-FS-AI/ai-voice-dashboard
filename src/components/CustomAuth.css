@@ -79,12 +79,19 @@
   justify-content: center;
   gap: 0.4rem;
   margin-top: 1.5rem;
+  z-index: 100;
+  position: relative;
 }
 
 .back-to-landing:hover {
   background: linear-gradient(135deg, #FFD700, #DAA520);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(218, 165, 32, 0.4);
+}
+
+.back-to-landing:active {
+  transform: translateY(0px);
+  box-shadow: 0 2px 8px rgba(218, 165, 32, 0.5);
 }
 
 .auth-logo {
