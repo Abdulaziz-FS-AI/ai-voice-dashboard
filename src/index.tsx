@@ -22,9 +22,9 @@ console.log('Final Config:');
 console.log('- Client ID:', awsconfig.Auth.Cognito.userPoolClientId);
 console.log('- Pool ID:', awsconfig.Auth.Cognito.userPoolId);
 
-if (awsconfig.Auth.Cognito.userPoolClientId !== '74d2vmmqkhkaeqva03duv4h8r0') {
+if (awsconfig.Auth.Cognito.userPoolClientId !== '2rusigajolp05bnl2hmgb34ku9') {
   console.error('🚨 WRONG CLIENT ID IN FINAL CONFIG!');
-  console.error('🚨 Expected: 74d2vmmqkhkaeqva03duv4h8r0');
+  console.error('🚨 Expected: 2rusigajolp05bnl2hmgb34ku9 (no client secret)');
   console.error('🚨 Got:', awsconfig.Auth.Cognito.userPoolClientId);
 }
 

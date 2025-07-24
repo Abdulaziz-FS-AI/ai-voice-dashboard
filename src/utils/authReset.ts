@@ -45,11 +45,11 @@ export const forceAuthReset = async (): Promise<void> => {
     const clientId = config.Auth?.Cognito?.userPoolClientId;
     console.log('✅ Reset complete! Current client ID:', clientId);
     
-    if (clientId === '74d2vmmqkhkaeqva03duv4h8r0') {
-      console.log('✅ Correct client ID confirmed');
+    if (clientId === '2rusigajolp05bnl2hmgb34ku9') {
+      console.log('✅ Correct client ID confirmed (no client secret)');
       return;
     } else {
-      throw new Error(`Wrong client ID: expected 74d2vmmqkhkaeqva03duv4h8r0, got ${clientId}`);
+      throw new Error(`Wrong client ID: expected 2rusigajolp05bnl2hmgb34ku9, got ${clientId}`);
     }
     
   } catch (error) {
