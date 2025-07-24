@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { signIn, signUp, confirmSignUp, resetPassword, confirmResetPassword } from 'aws-amplify/auth';
 import { forceAuthReset, isUsingOldClientId } from '../utils/authReset';
+import { cognitoSignIn, cognitoSignUp, cognitoConfirmSignUp } from '../utils/cognitoAuth';
 import './CustomAuth.css';
 
 interface CustomAuthProps {
@@ -15,6 +16,7 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [useManualAuth, setUseManualAuth] = useState(false);
   
   // Form data
   const [email, setEmail] = useState('');
@@ -36,14 +38,28 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
     setError('');
     
     try {
-      console.log('🔐 Attempting sign in with:', { email });
+      console.log('🔐 Attempting sign in with:', { email, method: useManualAuth ? 'manual' : 'amplify' });
       
-      // Force a complete reset before attempting sign in
-      await forceAuthReset();
-      
-      const result = await signIn({ username: email, password });
-      console.log('✅ Sign in successful:', result);
-      onSuccess();
+      if (useManualAuth) {
+        // Use manual Cognito SDK approach
+        console.log('🔧 Using manual Cognito authentication...');
+        const result = await cognitoSignIn(email, password);
+        console.log('✅ Manual sign in successful:', result);
+        
+        // For manual auth, we need to handle the token storage manually
+        // For now, just mark as successful
+        onSuccess();
+      } else {
+        // Use Amplify approach (original)
+        console.log('🔧 Using Amplify authentication...');
+        
+        // Force a complete reset before attempting sign in
+        await forceAuthReset();
+        
+        const result = await signIn({ username: email, password });
+        console.log('✅ Amplify sign in successful:', result);
+        onSuccess();
+      }
     } catch (err: any) {
       console.error('❌ Sign in error:', err);
       console.error('Error details:', {
@@ -51,7 +67,13 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         code: err.code,
         name: err.name
       });
-      setError(err.message || 'Sign in failed');
+      
+      // If Amplify fails with SECRET_HASH error, suggest manual auth
+      if (!useManualAuth && err.message?.includes('SECRET_HASH')) {
+        setError(`${err.message || 'Sign in failed'}. Try switching to Manual Authentication below.`);
+      } else {
+        setError(err.message || 'Sign in failed');
+      }
     }
     setLoading(false);
   };
@@ -72,17 +94,27 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
     setError('');
     
     try {
-      await signUp({
-        username: email,
-        password,
-        options: {
-          userAttributes: {
-            email
+      if (useManualAuth) {
+        // Use manual Cognito SDK approach
+        console.log('🔧 Using manual Cognito sign-up...');
+        await cognitoSignUp(email, password, email);
+        setMessage('Please check your email for verification code');
+        setAuthState('confirm');
+      } else {
+        // Use Amplify approach (original)
+        console.log('🔧 Using Amplify sign-up...');
+        await signUp({
+          username: email,
+          password,
+          options: {
+            userAttributes: {
+              email
+            }
           }
-        }
-      });
-      setMessage('Please check your email for verification code');
-      setAuthState('confirm');
+        });
+        setMessage('Please check your email for verification code');
+        setAuthState('confirm');
+      }
     } catch (err: any) {
       setError(err.message || 'Sign up failed');
     }
@@ -95,12 +127,22 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
     setError('');
     
     try {
-      await confirmSignUp({
-        username: email,
-        confirmationCode
-      });
-      setMessage('Account confirmed! Please sign in.');
-      setAuthState('signin');
+      if (useManualAuth) {
+        // Use manual Cognito SDK approach
+        console.log('🔧 Using manual Cognito confirmation...');
+        await cognitoConfirmSignUp(email, confirmationCode);
+        setMessage('Account confirmed! Please sign in.');
+        setAuthState('signin');
+      } else {
+        // Use Amplify approach (original)
+        console.log('🔧 Using Amplify confirmation...');
+        await confirmSignUp({
+          username: email,
+          confirmationCode
+        });
+        setMessage('Account confirmed! Please sign in.');
+        setAuthState('signin');
+      }
     } catch (err: any) {
       setError(err.message || 'Confirmation failed');
     }
@@ -188,6 +230,34 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         </button>
       </form>
       
+      <div className="auth-method-toggle" style={{ 
+        padding: '15px', 
+        backgroundColor: '#2a2a4a', 
+        borderRadius: '8px', 
+        marginBottom: '15px',
+        textAlign: 'center'
+      }}>
+        <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#ccc' }}>
+          Authentication Method:
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={useManualAuth}
+            onChange={(e) => setUseManualAuth(e.target.checked)}
+            style={{ transform: 'scale(1.2)' }}
+          />
+          <span style={{ fontSize: '14px', color: useManualAuth ? '#4CAF50' : '#ccc' }}>
+            {useManualAuth ? '🔧 Manual Cognito SDK' : '🔧 AWS Amplify (default)'}
+          </span>
+        </label>
+        {useManualAuth && (
+          <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#ffa726' }}>
+            ⚠️ Uses direct AWS SDK with SECRET_HASH handling
+          </p>
+        )}
+      </div>
+      
       <div className="auth-links">
         <button type="button" className="link-button" onClick={() => setAuthState('forgot')}>
           Forgot your password?
@@ -252,6 +322,34 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
           <span className="button-arrow">→</span>
         </button>
       </form>
+      
+      <div className="auth-method-toggle" style={{ 
+        padding: '15px', 
+        backgroundColor: '#2a2a4a', 
+        borderRadius: '8px', 
+        marginBottom: '15px',
+        textAlign: 'center'
+      }}>
+        <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#ccc' }}>
+          Authentication Method:
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={useManualAuth}
+            onChange={(e) => setUseManualAuth(e.target.checked)}
+            style={{ transform: 'scale(1.2)' }}
+          />
+          <span style={{ fontSize: '14px', color: useManualAuth ? '#4CAF50' : '#ccc' }}>
+            {useManualAuth ? '🔧 Manual Cognito SDK' : '🔧 AWS Amplify (default)'}
+          </span>
+        </label>
+        {useManualAuth && (
+          <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#ffa726' }}>
+            ⚠️ Uses direct AWS SDK with SECRET_HASH handling
+          </p>
+        )}
+      </div>
       
       <div className="auth-links">
         <div className="auth-separator">
