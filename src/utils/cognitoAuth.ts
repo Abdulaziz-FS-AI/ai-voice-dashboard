@@ -62,7 +62,7 @@ export const cognitoSignIn = async (username: string, password: string) => {
 /**
  * Alternative sign-up method that manually handles SECRET_HASH
  */
-export const cognitoSignUp = async (username: string, password: string, email: string) => {
+export const cognitoSignUp = async (username: string, password: string, email: string, name?: string) => {
   console.log('📝 Starting manual Cognito sign-up...');
   
   try {
@@ -80,16 +80,26 @@ export const cognitoSignUp = async (username: string, password: string, email: s
       console.log('🔓 Public client - no SECRET_HASH needed for sign-up');
     }
 
+    const userAttributes = [
+      {
+        Name: 'email',
+        Value: email
+      }
+    ];
+
+    // Add name attribute if provided
+    if (name && name.trim()) {
+      userAttributes.push({
+        Name: 'name',
+        Value: name.trim()
+      });
+    }
+
     const command = new SignUpCommand({
       ClientId: CLIENT_ID,
       Username: username,
       Password: password,
-      UserAttributes: [
-        {
-          Name: 'email',
-          Value: email
-        }
-      ],
+      UserAttributes: userAttributes,
       ...(secretHash && { SecretHash: secretHash })
     });
 

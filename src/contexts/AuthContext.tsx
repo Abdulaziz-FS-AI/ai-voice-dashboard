@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getCurrentUser, signOut, AuthUser } from 'aws-amplify/auth';
+import { getCurrentUser, signOut, AuthUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 
 interface AuthContextType {
   user: AuthUser | null;
+  userName: string | null;
   loading: boolean;
   logout: () => Promise<void>;
 }
@@ -12,6 +13,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,6 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           break;
         case 'signedOut':
           setUser(null);
+          setUserName(null);
           break;
         default:
           break;
@@ -51,8 +54,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      
+      // Fetch user attributes to get the name
+      try {
+        const attributes = await fetchUserAttributes();
+        const name = attributes.name || attributes.email?.split('@')[0] || currentUser.username;
+        setUserName(name);
+        console.log('📝 User attributes:', attributes);
+      } catch (attrError) {
+        console.log('⚠️ Could not fetch user attributes:', attrError);
+        // Fallback to username or email
+        const fallbackName = currentUser.signInDetails?.loginId?.split('@')[0] || currentUser.username;
+        setUserName(fallbackName);
+      }
     } catch (error) {
       setUser(null);
+      setUserName(null);
     } finally {
       setLoading(false);
     }
@@ -62,13 +79,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signOut();
       setUser(null);
+      setUserName(null);
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={{ user, userName, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );

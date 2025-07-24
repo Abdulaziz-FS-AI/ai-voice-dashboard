@@ -24,7 +24,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, testMode = false }) =
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings'>('dashboard');
-  const { user, logout } = useAuth();
+  const { user, userName, logout } = useAuth();
 
   // Mock data
   const mockCallLogs: CallLog[] = [
@@ -150,7 +150,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, testMode = false }) =
           </button>
           {user && (
             <div className="user-section">
-              <span className="user-name">Welcome, {user.username}</span>
+              <span className="user-name">Welcome, {userName || 'User'}</span>
               <button className="logout-button" onClick={logout}>
                 Logout
               </button>

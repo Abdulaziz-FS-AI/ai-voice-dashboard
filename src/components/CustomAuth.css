@@ -39,12 +39,12 @@
 .auth-card {
   position: relative;
   width: 100%;
-  max-width: 440px;
+  max-width: 380px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 24px;
-  padding: 2.5rem;
+  padding: 2rem;
   box-shadow: 
     0 20px 40px rgba(0, 0, 0, 0.3),
     0 0 80px rgba(218, 165, 32, 0.1);
@@ -63,24 +63,22 @@
 }
 
 .back-to-landing {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
   background: linear-gradient(135deg, #DAA520, #FFD700);
   color: #000;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 25px;
+  padding: 0.6rem 1.2rem;
+  border-radius: 20px;
   cursor: pointer;
   transition: all 0.3s ease;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
-  z-index: 10;
-  box-shadow: 0 4px 15px rgba(218, 165, 32, 0.3);
+  box-shadow: 0 3px 12px rgba(218, 165, 32, 0.3);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
 }
 
 .back-to-landing:hover {
@@ -328,15 +326,14 @@
 @media (max-width: 480px) {
   .auth-card {
     margin: 1rem;
-    padding: 2rem;
+    padding: 1.5rem;
     max-width: none;
   }
   
   .back-to-landing {
-    position: static;
-    transform: none;
-    margin-bottom: 1.5rem;
-    align-self: center;
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
   }
   
   .auth-title {

@@ -16,13 +16,14 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [useManualAuth, setUseManualAuth] = useState(false);
+  const [useManualAuth] = useState(false);
   
   // Form data
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
+  const [name, setName] = useState('');
 
   useEffect(() => {
     // Check if we need to reset due to old client ID
@@ -50,15 +51,33 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         // For now, just mark as successful
         onSuccess();
       } else {
-        // Use Amplify approach (original)
+        // Use Amplify approach (original) with automatic fallback
         console.log('🔧 Using Amplify authentication...');
         
-        // Force a complete reset before attempting sign in
-        await forceAuthReset();
-        
-        const result = await signIn({ username: email, password });
-        console.log('✅ Amplify sign in successful:', result);
-        onSuccess();
+        try {
+          // Force a complete reset before attempting sign in
+          await forceAuthReset();
+          
+          const result = await signIn({ username: email, password });
+          console.log('✅ Amplify sign in successful:', result);
+          onSuccess();
+        } catch (amplifyError: any) {
+          // If Amplify fails with SECRET_HASH error, automatically try manual auth
+          if (amplifyError.message?.includes('SECRET_HASH')) {
+            console.log('🔄 Amplify failed with SECRET_HASH error, automatically trying manual authentication...');
+            setError('Amplify authentication failed, trying alternative method...');
+            
+            // Wait a moment for user to see the message
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Try manual authentication
+            const manualResult = await cognitoSignIn(email, password);
+            console.log('✅ Manual sign in successful after Amplify failure:', manualResult);
+            onSuccess();
+          } else {
+            throw amplifyError; // Re-throw if it's not a SECRET_HASH error
+          }
+        }
       }
     } catch (err: any) {
       console.error('❌ Sign in error:', err);
@@ -68,12 +87,7 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         name: err.name
       });
       
-      // If Amplify fails with SECRET_HASH error, suggest manual auth
-      if (!useManualAuth && err.message?.includes('SECRET_HASH')) {
-        setError(`${err.message || 'Sign in failed'}. Try switching to Manual Authentication below.`);
-      } else {
-        setError(err.message || 'Sign in failed');
-      }
+      setError(err.message || 'Sign in failed');
     }
     setLoading(false);
   };
@@ -81,6 +95,14 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    if (name.trim().length < 2) {
+      setError('Name must be at least 2 characters long');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -97,7 +119,7 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
       if (useManualAuth) {
         // Use manual Cognito SDK approach
         console.log('🔧 Using manual Cognito sign-up...');
-        await cognitoSignUp(email, password, email);
+        await cognitoSignUp(email, password, email, name.trim());
         setMessage('Please check your email for verification code');
         setAuthState('confirm');
       } else {
@@ -108,7 +130,8 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
           password,
           options: {
             userAttributes: {
-              email
+              email,
+              name: name.trim()
             }
           }
         });
@@ -230,33 +253,6 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         </button>
       </form>
       
-      <div className="auth-method-toggle" style={{ 
-        padding: '15px', 
-        backgroundColor: '#2a2a4a', 
-        borderRadius: '8px', 
-        marginBottom: '15px',
-        textAlign: 'center'
-      }}>
-        <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#ccc' }}>
-          Authentication Method:
-        </p>
-        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={useManualAuth}
-            onChange={(e) => setUseManualAuth(e.target.checked)}
-            style={{ transform: 'scale(1.2)' }}
-          />
-          <span style={{ fontSize: '14px', color: useManualAuth ? '#4CAF50' : '#ccc' }}>
-            {useManualAuth ? '🔧 Manual Cognito SDK' : '🔧 AWS Amplify (default)'}
-          </span>
-        </label>
-        {useManualAuth && (
-          <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#ffa726' }}>
-            ⚠️ Uses direct AWS SDK with SECRET_HASH handling
-          </p>
-        )}
-      </div>
       
       <div className="auth-links">
         <button type="button" className="link-button" onClick={() => setAuthState('forgot')}>
@@ -280,6 +276,18 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
       </div>
       
       <form onSubmit={handleSignUp} className="auth-form">
+        <div className="form-field">
+          <label htmlFor="signup-name">Full Name</label>
+          <input
+            id="signup-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your full name"
+            required
+          />
+        </div>
+        
         <div className="form-field">
           <label htmlFor="signup-email">Email Address</label>
           <input
@@ -323,33 +331,6 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         </button>
       </form>
       
-      <div className="auth-method-toggle" style={{ 
-        padding: '15px', 
-        backgroundColor: '#2a2a4a', 
-        borderRadius: '8px', 
-        marginBottom: '15px',
-        textAlign: 'center'
-      }}>
-        <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#ccc' }}>
-          Authentication Method:
-        </p>
-        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={useManualAuth}
-            onChange={(e) => setUseManualAuth(e.target.checked)}
-            style={{ transform: 'scale(1.2)' }}
-          />
-          <span style={{ fontSize: '14px', color: useManualAuth ? '#4CAF50' : '#ccc' }}>
-            {useManualAuth ? '🔧 Manual Cognito SDK' : '🔧 AWS Amplify (default)'}
-          </span>
-        </label>
-        {useManualAuth && (
-          <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#ffa726' }}>
-            ⚠️ Uses direct AWS SDK with SECRET_HASH handling
-          </p>
-        )}
-      </div>
       
       <div className="auth-links">
         <div className="auth-separator">
@@ -506,16 +487,12 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         <div className="auth-particles"></div>
       </div>
       
-      <div className="auth-card">
-        <button className="back-to-landing" onClick={onBack}>
-          <span>←</span>
-          Back to Home
-        </button>
-        
-        <div className="auth-logo">
-          <div className="logo-icon">🎙️</div>
-          <span className="logo-text">Voice Matrix</span>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div className="auth-card">
+          <div className="auth-logo">
+            <div className="logo-icon">🎙️</div>
+            <span className="logo-text">Voice Matrix</span>
+          </div>
         
         {error && (
           <div className="auth-message error">
@@ -531,7 +508,13 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
           </div>
         )}
         
-        {renderCurrentForm()}
+          {renderCurrentForm()}
+        </div>
+        
+        <button className="back-to-landing" onClick={onBack}>
+          <span>←</span>
+          Back to Home
+        </button>
       </div>
     </div>
   );
