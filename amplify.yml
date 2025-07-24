@@ -3,15 +3,9 @@ frontend:
   phases:
     preBuild:
       commands:
-        - echo "Node version:"
-        - node --version
-        - echo "NPM version:"
-        - npm --version
-        - echo "Installing dependencies..."
-        - npm ci --legacy-peer-deps --force
+        - npm install --force
     build:
       commands:
-        - echo "Building application..."
         - npm run build
   artifacts:
     baseDirectory: build
