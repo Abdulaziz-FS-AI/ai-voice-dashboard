@@ -1,11 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Authenticator } from '@aws-amplify/ui-react';
 import './LandingPage.css';
 
 interface LandingPageProps {
   onGetStarted: () => void;
+  onTestLogin: () => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) => {
+  const [showAuth, setShowAuth] = useState(false);
+
+  const handleGetStarted = () => {
+    setShowAuth(true);
+  };
+
+  if (showAuth) {
+    return (
+      <div className="auth-container">
+        <div className="auth-wrapper">
+          <button 
+            className="back-button" 
+            onClick={() => setShowAuth(false)}
+          >
+            ← Back to Landing
+          </button>
+          <Authenticator>
+            {({ signOut, user }) => (
+              <div className="auth-success">
+                <h2>Welcome to Voice Matrix!</h2>
+                <p>You are now signed in as {user?.username}</p>
+                <button onClick={signOut}>Sign out</button>
+              </div>
+            )}
+          </Authenticator>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="landing-page">
       {/* Navigation */}
@@ -19,7 +51,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <a href="#features" className="nav-link">Features</a>
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
-            <button className="nav-cta" onClick={onGetStarted}>Get Started</button>
+            <button className="nav-test" onClick={onTestLogin}>Test</button>
+            <button className="nav-cta" onClick={handleGetStarted}>Get Started</button>
           </div>
         </div>
       </nav>
@@ -40,13 +73,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               Monitor, analyze, and optimize your voice agents with real-time insights and powerful analytics.
             </p>
             <div className="hero-actions">
-              <button className="cta-primary" onClick={onGetStarted}>
+              <button className="cta-primary" onClick={handleGetStarted}>
                 Start Free Trial
                 <span className="cta-arrow">→</span>
               </button>
               <button className="cta-secondary">
                 Watch Demo
                 <span className="play-icon">▶</span>
+              </button>
+              <button className="cta-test" onClick={onTestLogin}>
+                Test Demo
               </button>
             </div>
             <div className="hero-stats">
@@ -211,7 +247,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               Join thousands of companies already using Voice Matrix to deliver exceptional customer experiences.
             </p>
             <div className="cta-actions">
-              <button className="cta-primary large" onClick={onGetStarted}>
+              <button className="cta-primary large" onClick={handleGetStarted}>
                 Start Your Free Trial
                 <span className="cta-arrow">→</span>
               </button>

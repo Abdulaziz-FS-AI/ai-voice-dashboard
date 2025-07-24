@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Dashboard.css';
 
 interface CallLog {
@@ -20,6 +21,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
+  const { user, logout } = useAuth();
 
   // Mock data
   const mockCallLogs: CallLog[] = [
@@ -136,6 +138,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <button className="config-button" onClick={() => onNavigate('editor')}>
             Configure AI Agent
           </button>
+          {user && (
+            <div className="user-section">
+              <span className="user-name">Welcome, {user.username}</span>
+              <button className="logout-button" onClick={logout}>
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
