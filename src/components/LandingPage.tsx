@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Authenticator } from '@aws-amplify/ui-react';
+import CustomAuth from './CustomAuth';
 import './LandingPage.css';
 
 interface LandingPageProps {
@@ -16,25 +16,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
 
   if (showAuth) {
     return (
-      <div className="auth-container">
-        <div className="auth-wrapper">
-          <button 
-            className="back-button" 
-            onClick={() => setShowAuth(false)}
-          >
-            ← Back to Landing
-          </button>
-          <Authenticator>
-            {({ signOut, user }) => (
-              <div className="auth-success">
-                <h2>Welcome to Voice Matrix!</h2>
-                <p>You are now signed in as {user?.username}</p>
-                <button onClick={signOut}>Sign out</button>
-              </div>
-            )}
-          </Authenticator>
-        </div>
-      </div>
+      <CustomAuth 
+        onSuccess={() => {
+          // This will trigger a re-render in the parent App component
+          // since the user context will be updated
+          setShowAuth(false);
+        }}
+        onBack={() => setShowAuth(false)}
+      />
     );
   }
 

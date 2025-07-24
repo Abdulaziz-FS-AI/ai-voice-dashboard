@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getCurrentUser, signOut, AuthUser } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -15,6 +16,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     checkAuthState();
+    
+    // Listen for auth events
+    const authListener = Hub.listen('auth', ({ payload }) => {
+      switch (payload.event) {
+        case 'signedIn':
+          checkAuthState();
+          break;
+        case 'signedOut':
+          setUser(null);
+          break;
+        default:
+          break;
+      }
+    });
+
+    return () => authListener();
   }, []);
 
   const checkAuthState = async () => {
