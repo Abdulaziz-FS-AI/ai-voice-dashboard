@@ -10,7 +10,12 @@ interface VapiCredentials {
   vapiConfiguredAt?: string;
 }
 
-const VapiSettings: React.FC = () => {
+interface VapiSettingsProps {
+  onBack?: () => void;
+  testMode?: boolean;
+}
+
+const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false }) => {
   const [apiKey, setApiKey] = useState('');
   const [orgId, setOrgId] = useState('');
   const [phoneNumbers, setPhoneNumbers] = useState<string[]>(['']);
@@ -22,9 +27,23 @@ const VapiSettings: React.FC = () => {
 
   useEffect(() => {
     fetchCredentials();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchCredentials = async () => {
+    if (testMode) {
+      // In test mode, show mock credentials
+      setCredentials({
+        hasVapiKey: true,
+        vapiOrgId: 'test-org-123',
+        phoneNumbers: ['+1-555-0123'],
+        vapiConfiguredAt: new Date().toISOString()
+      });
+      setOrgId('test-org-123');
+      setPhoneNumbers(['+1-555-0123']);
+      return;
+    }
+    
     if (!user) return;
     
     setLoading(true);
@@ -160,6 +179,11 @@ const VapiSettings: React.FC = () => {
   return (
     <div className="vapi-settings">
       <div className="settings-header">
+        {onBack && (
+          <button className="back-button" onClick={onBack}>
+            ← Back to Dashboard
+          </button>
+        )}
         <h2>🎯 VAPI Integration</h2>
         <p>Connect your VAPI account to manage voice assistants and track real call data.</p>
       </div>

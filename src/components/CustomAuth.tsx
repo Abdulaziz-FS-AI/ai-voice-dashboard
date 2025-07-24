@@ -35,18 +35,6 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
     setLoading(false);
   };
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    setError('');
-    
-    try {
-      await signIn({ provider: 'Google' });
-      onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Google sign in failed');
-    }
-    setLoading(false);
-  };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,20 +166,6 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
           <span className="button-arrow">→</span>
         </button>
       </form>
-      
-      <div className="auth-divider">
-        <span>or</span>
-      </div>
-      
-      <button 
-        type="button" 
-        className="auth-button google" 
-        onClick={handleGoogleSignIn}
-        disabled={loading}
-      >
-        <span className="google-icon">🇬</span>
-        {loading ? <span className="spinner"></span> : 'Continue with Google'}
-      </button>
       
       <div className="auth-links">
         <button type="button" className="link-button" onClick={() => setAuthState('forgot')}>
