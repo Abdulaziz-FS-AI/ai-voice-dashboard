@@ -3,10 +3,10 @@ import { SignInButton, SignUpButton } from '@clerk/clerk-react';
 import './LandingPage.css';
 
 interface LandingPageProps {
-  onGetStarted: () => void;
+  onTestLogin: () => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onTestLogin }) => {
   return (
     <div className="landing-page">
       {/* Navigation */}
@@ -20,6 +20,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <a href="#features" className="nav-link">Features</a>
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
+            <button className="nav-test" onClick={onTestLogin}>Test</button>
             <SignInButton mode="modal">
               <button className="nav-cta">Get Started</button>
             </SignInButton>
@@ -52,6 +53,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               <button className="cta-secondary">
                 Watch Demo
                 <span className="play-icon">▶</span>
+              </button>
+              <button className="cta-test" onClick={onTestLogin}>
+                Test Demo
               </button>
             </div>
             <div className="hero-stats">
