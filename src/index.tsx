@@ -7,8 +7,27 @@ import { Amplify } from 'aws-amplify';
 import awsconfig from './aws-exports';
 
 console.log('🔧 Amplify Configuration:');
-console.log('Client ID:', awsconfig.Auth.Cognito.userPoolClientId);
-console.log('Pool ID:', awsconfig.Auth.Cognito.userPoolId);
+console.log('Environment Variables:');
+console.log('- REACT_APP_USER_POOL_ID:', process.env.REACT_APP_USER_POOL_ID);
+console.log('- REACT_APP_USER_POOL_WEB_CLIENT_ID:', process.env.REACT_APP_USER_POOL_WEB_CLIENT_ID);
+
+// Check for problematic environment variable
+if (process.env.REACT_APP_USER_POOL_WEB_CLIENT_ID === '7645g8ltvu8mqc3sobft1ns2pa') {
+  console.error('🚨 DETECTED OLD CLIENT ID IN ENVIRONMENT VARIABLE!');
+  console.error('🚨 AWS Amplify environment variable needs to be updated!');
+  console.error('🚨 Forcing override to new client ID...');
+}
+
+console.log('Final Config:');
+console.log('- Client ID:', awsconfig.Auth.Cognito.userPoolClientId);
+console.log('- Pool ID:', awsconfig.Auth.Cognito.userPoolId);
+
+if (awsconfig.Auth.Cognito.userPoolClientId !== '74d2vmmqkhkaeqva03duv4h8r0') {
+  console.error('🚨 WRONG CLIENT ID IN FINAL CONFIG!');
+  console.error('🚨 Expected: 74d2vmmqkhkaeqva03duv4h8r0');
+  console.error('🚨 Got:', awsconfig.Auth.Cognito.userPoolClientId);
+}
+
 console.log('Full config:', JSON.stringify(awsconfig, null, 2));
 
 // Clear any existing Amplify cache before configuring
