@@ -9,11 +9,39 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 215, 0, 0.2);
+  position: relative;
 }
 
 .settings-header {
   text-align: center;
   margin-bottom: 2rem;
+  position: relative;
+}
+
+.back-button {
+  position: absolute;
+  top: -1rem;
+  left: -1rem;
+  background: linear-gradient(135deg, #DAA520, #FFD700);
+  color: #000;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 15px rgba(218, 165, 32, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.back-button:hover {
+  background: linear-gradient(135deg, #FFD700, #DAA520);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(218, 165, 32, 0.4);
 }
 
 .settings-header h2 {

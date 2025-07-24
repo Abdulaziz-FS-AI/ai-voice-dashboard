@@ -389,7 +389,8 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
       
       <div className="auth-card">
         <button className="back-to-landing" onClick={onBack}>
-          ← Back to Landing
+          <span>←</span>
+          Back to Home
         </button>
         
         <div className="auth-logo">

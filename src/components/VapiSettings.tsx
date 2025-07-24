@@ -181,7 +181,8 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false })
       <div className="settings-header">
         {onBack && (
           <button className="back-button" onClick={onBack}>
-            ← Back to Dashboard
+            <span>←</span>
+            Back to Dashboard
           </button>
         )}
         <h2>🎯 VAPI Integration</h2>
