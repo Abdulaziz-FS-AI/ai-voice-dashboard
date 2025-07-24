@@ -43,7 +43,7 @@ const AppContent: React.FC = () => {
 
   // Show PIN login if test mode is activated
   if (showTestLogin) {
-    return <PinLogin onLogin={handlePinLogin} />;
+    return <PinLogin onLogin={handlePinLogin} onBack={() => setShowTestLogin(false)} />;
   }
 
   // Show authenticated content if user is logged in

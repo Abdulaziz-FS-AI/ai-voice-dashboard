@@ -64,8 +64,9 @@
 
 .back-to-landing {
   position: absolute;
-  top: -60px;
-  left: 0;
+  top: -70px;
+  left: 50%;
+  transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   color: rgba(255, 255, 255, 0.8);
@@ -76,12 +77,14 @@
   transition: all 0.3s ease;
   font-size: 0.9rem;
   font-weight: 500;
+  white-space: nowrap;
+  z-index: 10;
 }
 
 .back-to-landing:hover {
   background: rgba(255, 255, 255, 0.15);
   color: white;
-  transform: translateY(-2px);
+  transform: translateX(-50%) translateY(-2px);
 }
 
 .auth-logo {
@@ -329,8 +332,9 @@
   
   .back-to-landing {
     position: static;
-    margin-bottom: 1rem;
-    align-self: flex-start;
+    transform: none;
+    margin-bottom: 1.5rem;
+    align-self: center;
   }
   
   .auth-title {

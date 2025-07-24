@@ -3,9 +3,10 @@ import './PinLogin.css';
 
 interface PinLoginProps {
   onLogin: () => void;
+  onBack?: () => void;
 }
 
-const PinLogin: React.FC<PinLoginProps> = ({ onLogin }) => {
+const PinLogin: React.FC<PinLoginProps> = ({ onLogin, onBack }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const CORRECT_PIN = '123456';
@@ -41,6 +42,11 @@ const PinLogin: React.FC<PinLoginProps> = ({ onLogin }) => {
   return (
     <div className="pin-login-container">
       <div className="pin-login-card">
+        {onBack && (
+          <button className="pin-back-button" onClick={onBack}>
+            ← Back to Landing
+          </button>
+        )}
         <div className="logo-container">
           <img 
             src="/voice-matrix-logo.png" 
