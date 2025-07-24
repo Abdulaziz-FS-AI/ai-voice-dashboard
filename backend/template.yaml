@@ -1,0 +1,401 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Voice Matrix Backend with VAPI Integration
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        REGION: eu-north-1
+        USERS_TABLE: voice-matrix-users
+        CALLS_TABLE: voice-matrix-calls
+        ANALYTICS_TABLE: voice-matrix-analytics
+        VAPI_SYNC_TABLE: voice-matrix-vapi-sync
+        ENCRYPTION_KEY: !Ref EncryptionKey
+
+Parameters:
+  EncryptionKey:
+    Type: String
+    Description: Encryption key for sensitive data
+    NoEcho: true
+    Default: "your-32-byte-encryption-key-here"
+
+Resources:
+  # API Gateway
+  VoiceMatrixApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/eu-north-1_RvDRR8Kgr'
+
+  # User Management Functions
+  GetUserProfile:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: user-management.getUserProfile
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/profile
+            Method: GET
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+  UpdateUserProfile:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: user-management.updateUserProfile
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/profile
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+  SaveVapiCredentials:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: user-management.saveVapiCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/vapi-credentials
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+  GetVapiCredentials:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: user-management.getVapiCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/vapi-credentials
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  RemoveVapiCredentials:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: user-management.removeVapiCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/vapi-credentials
+            Method: DELETE
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+  # VAPI Integration Functions
+  GetVapiAssistants:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.getAssistants
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  CreateVapiAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.createAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants
+            Method: POST
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  UpdateVapiAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.updateAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants/{assistantId}
+            Method: PATCH
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  DeleteVapiAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.deleteAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants/{assistantId}
+            Method: DELETE
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  GetVapiCalls:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.getVapiCalls
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/calls
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  # VAPI Webhook Handler (No Auth Required)
+  VapiWebhookHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-webhook.handleWebhook
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /webhook/vapi
+            Method: POST
+            Auth:
+              Authorizer: NONE
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CallsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalyticsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+
+  # Data Sync Functions
+  VapiSyncScheduler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-sync.syncVapiData
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CallsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalyticsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VapiSyncTable
+
+  SyncUserData:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-sync.syncUserData
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/sync
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CallsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalyticsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VapiSyncTable
+
+  GetSyncStatus:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: user-management.getSyncStatus
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /user/sync-status
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref VapiSyncTable
+
+  # Legacy Dashboard Functions (Updated for VAPI)
+  GetDashboardData:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: dashboard.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /dashboard
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AnalyticsTable
+
+  GetCallLogs:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: calls.getCallLogs
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /calls
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallsTable
+
+  # DynamoDB Tables
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-users
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  CallsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-calls
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: callId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: callId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: timestamp-index
+          KeySchema:
+            - AttributeName: timestamp
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+
+  AnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-analytics
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: date
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+  VapiSyncTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-vapi-sync
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: syncType
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: syncType
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+Outputs:
+  VoiceMatrixApiUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${VoiceMatrixApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
+
+  VapiWebhookUrl:
+    Description: "VAPI Webhook endpoint URL"
+    Value: !Sub "https://${VoiceMatrixApi}.execute-api.${AWS::Region}.amazonaws.com/prod/webhook/vapi"
+    Export:
+      Name: !Sub "${AWS::StackName}-WebhookUrl"

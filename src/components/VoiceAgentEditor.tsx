@@ -1,5 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './VoiceAgentEditor.css';
+
+interface VapiAssistant {
+  id: string;
+  name: string;
+  model: {
+    provider: string;
+    model: string;
+    messages?: Array<{
+      role: string;
+      content: string;
+    }>;
+  };
+  voice: {
+    provider: string;
+    voiceId: string;
+  };
+  firstMessage?: string;
+  serverUrl?: string;
+  metadata?: any;
+}
 
 interface AgentConfig {
   companyName: string;
@@ -24,6 +45,13 @@ interface VoiceAgentEditorProps {
 }
 
 const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate }) => {
+  const { user } = useAuth();
+  const [assistants, setAssistants] = useState<VapiAssistant[]>([]);
+  const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
   const [config, setConfig] = useState<AgentConfig>({
     companyName: 'Voice Matrix',
     welcomeMessage: 'Hello! Welcome to Voice Matrix. How can our AI assistant help you today?',
@@ -42,6 +70,78 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
   });
 
   const [showQuestionForm, setShowQuestionForm] = useState(false);
+
+  useEffect(() => {
+    fetchAssistants();
+  }, []);
+
+  const fetchAssistants = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const token = await user.getJWTToken();
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/assistants`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAssistants(data);
+        if (data.length > 0) {
+          setSelectedAssistant(data[0]);
+          loadAssistantConfig(data[0]);
+        }
+      } else if (response.status === 400) {
+        setMessage({ type: 'error', text: 'Please configure your VAPI credentials first' });
+      }
+    } catch (error) {
+      console.error('Error fetching assistants:', error);
+      setMessage({ type: 'error', text: 'Failed to load assistants' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAssistantConfig = (assistant: VapiAssistant) => {
+    // Convert VAPI assistant to our config format
+    const systemMessage = assistant.model.messages?.find(m => m.role === 'system')?.content || '';
+    
+    setConfig({
+      companyName: assistant.metadata?.companyName || assistant.name,
+      welcomeMessage: assistant.firstMessage || 'Hello! How can I help you today?',
+      voiceGender: getVoiceGender(assistant.voice.voiceId),
+      voiceAccent: getVoiceAccent(assistant.voice.voiceId),
+      personality: extractPersonality(systemMessage),
+      questions: assistant.metadata?.questions || []
+    });
+  };
+
+  const getVoiceGender = (voiceId: string): 'male' | 'female' => {
+    // Map VAPI voice IDs to gender (this is a simplified mapping)
+    const femaleVoices = ['jennifer', 'alloy', 'nova', 'sarah'];
+    return femaleVoices.some(v => voiceId.toLowerCase().includes(v)) ? 'female' : 'male';
+  };
+
+  const getVoiceAccent = (voiceId: string): string => {
+    // Map VAPI voice IDs to accents (simplified)
+    if (voiceId.toLowerCase().includes('british')) return 'british';
+    if (voiceId.toLowerCase().includes('australian')) return 'australian';
+    if (voiceId.toLowerCase().includes('canadian')) return 'canadian';
+    return 'american';
+  };
+
+  const extractPersonality = (systemMessage: string): string => {
+    if (systemMessage.toLowerCase().includes('professional')) return 'professional';
+    if (systemMessage.toLowerCase().includes('friendly')) return 'friendly';
+    if (systemMessage.toLowerCase().includes('casual')) return 'casual';
+    if (systemMessage.toLowerCase().includes('formal')) return 'formal';
+    if (systemMessage.toLowerCase().includes('enthusiastic')) return 'enthusiastic';
+    return 'professional';
+  };
 
   const handleConfigChange = (field: keyof AgentConfig, value: any) => {
     setConfig(prev => ({ ...prev, [field]: value }));
@@ -75,9 +175,106 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
     }));
   };
 
-  const handleSave = () => {
-    onSave(config);
-    alert('Voice agent configuration saved successfully!');
+  const handleSave = async () => {
+    if (!selectedAssistant || !user) return;
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      // Build VAPI assistant configuration
+      const vapiConfig = buildVapiConfig(config);
+      
+      const token = await user.getJWTToken();
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/assistants/${selectedAssistant.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(vapiConfig)
+      });
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Assistant configuration saved successfully!' });
+        onSave(config);
+        await fetchAssistants(); // Refresh the list
+      } else {
+        const error = await response.json();
+        setMessage({ type: 'error', text: error.error || 'Failed to save configuration' });
+      }
+    } catch (error) {
+      console.error('Error saving configuration:', error);
+      setMessage({ type: 'error', text: 'Failed to save configuration' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buildVapiConfig = (config: AgentConfig) => {
+    // Convert our config to VAPI format
+    const systemPrompt = buildSystemPrompt(config);
+    const voiceId = getVapiVoiceId(config.voiceGender, config.voiceAccent);
+
+    return {
+      name: config.companyName,
+      firstMessage: config.welcomeMessage,
+      model: {
+        provider: 'openai',
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          }
+        ]
+      },
+      voice: {
+        provider: 'playht',
+        voiceId: voiceId
+      },
+      metadata: {
+        companyName: config.companyName,
+        questions: config.questions,
+        personality: config.personality
+      }
+    };
+  };
+
+  const buildSystemPrompt = (config: AgentConfig): string => {
+    let prompt = `You are a ${config.personality} AI assistant for ${config.companyName}. `;
+    
+    if (config.questions.length > 0) {
+      prompt += `\n\nDuring the call, please ask the following questions:\n`;
+      config.questions.forEach((q, index) => {
+        prompt += `${index + 1}. ${q.question}`;
+        if (q.required) prompt += ' (Required)';
+        if (q.options && q.options.length > 0) {
+          prompt += ` Options: ${q.options.join(', ')}`;
+        }
+        prompt += '\n';
+      });
+    }
+
+    prompt += `\nAlways be ${config.personality} and helpful. Keep responses concise and focused.`;
+    
+    return prompt;
+  };
+
+  const getVapiVoiceId = (gender: string, accent: string): string => {
+    // Map our settings to VAPI voice IDs
+    const voiceMap: { [key: string]: string } = {
+      'female-american': 'jennifer',
+      'female-british': 'sarah-british',
+      'female-australian': 'lisa-australian',
+      'female-canadian': 'nova',
+      'male-american': 'matthew',
+      'male-british': 'arthur-british',
+      'male-australian': 'jack-australian',
+      'male-canadian': 'liam'
+    };
+    
+    return voiceMap[`${gender}-${accent}`] || 'jennifer';
   };
 
   const addOption = () => {
@@ -101,6 +298,17 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
     }));
   };
 
+  if (loading) {
+    return (
+      <div className="voice-editor-container">
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading VAPI assistants...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="voice-editor-container">
       <div className="editor-header">
@@ -115,18 +323,50 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
           />
           <div className="header-title">
             <h1>Voice Matrix Agent Configuration</h1>
-            <span className="editor-subtitle">Customize Your AI Assistant</span>
+            <span className="editor-subtitle">Customize Your VAPI Assistant</span>
           </div>
         </div>
         <div className="header-buttons">
           <button className="nav-button" onClick={() => onNavigate('dashboard')}>
             Dashboard
           </button>
-          <button className="save-button" onClick={handleSave}>
-            Save Configuration
+          <button 
+            className="save-button" 
+            onClick={handleSave}
+            disabled={saving || !selectedAssistant}
+          >
+            {saving ? 'Saving...' : 'Save Configuration'}
           </button>
         </div>
       </div>
+
+      {message && (
+        <div className={`message ${message.type}`}>
+          {message.text}
+        </div>
+      )}
+
+      {assistants.length > 0 && (
+        <div className="assistant-selector">
+          <label>Select Assistant to Edit:</label>
+          <select
+            value={selectedAssistant?.id || ''}
+            onChange={(e) => {
+              const assistant = assistants.find(a => a.id === e.target.value);
+              if (assistant) {
+                setSelectedAssistant(assistant);
+                loadAssistantConfig(assistant);
+              }
+            }}
+          >
+            {assistants.map(assistant => (
+              <option key={assistant.id} value={assistant.id}>
+                {assistant.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="editor-content">
         <div className="config-section">

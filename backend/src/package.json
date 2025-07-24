@@ -1,0 +1,23 @@
+{
+  "name": "voice-matrix-backend",
+  "version": "1.0.0",
+  "description": "Voice Matrix serverless backend with VAPI integration",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.1490.0",
+    "axios": "^1.6.0",
+    "uuid": "^9.0.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "voice",
+    "ai",
+    "vapi",
+    "serverless",
+    "aws"
+  ],
+  "author": "Voice Matrix",
+  "license": "MIT"
+}
