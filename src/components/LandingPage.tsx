@@ -1,4 +1,5 @@
 import React from 'react';
+import { SignInButton, SignUpButton } from '@clerk/clerk-react';
 import './LandingPage.css';
 
 interface LandingPageProps {
@@ -19,7 +20,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <a href="#features" className="nav-link">Features</a>
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
-            <button className="nav-cta" onClick={onGetStarted}>Get Started</button>
+            <SignInButton mode="modal">
+              <button className="nav-cta">Get Started</button>
+            </SignInButton>
           </div>
         </div>
       </nav>
@@ -40,10 +43,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               Monitor, analyze, and optimize your voice agents with real-time insights and powerful analytics.
             </p>
             <div className="hero-actions">
-              <button className="cta-primary" onClick={onGetStarted}>
-                Start Free Trial
-                <span className="cta-arrow">→</span>
-              </button>
+              <SignUpButton mode="modal">
+                <button className="cta-primary">
+                  Start Free Trial
+                  <span className="cta-arrow">→</span>
+                </button>
+              </SignUpButton>
               <button className="cta-secondary">
                 Watch Demo
                 <span className="play-icon">▶</span>
@@ -211,10 +216,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               Join thousands of companies already using Voice Matrix to deliver exceptional customer experiences.
             </p>
             <div className="cta-actions">
-              <button className="cta-primary large" onClick={onGetStarted}>
-                Start Your Free Trial
-                <span className="cta-arrow">→</span>
-              </button>
+              <SignUpButton mode="modal">
+                <button className="cta-primary large">
+                  Start Your Free Trial
+                  <span className="cta-arrow">→</span>
+                </button>
+              </SignUpButton>
               <div className="cta-note">
                 No credit card required • 14-day free trial • Cancel anytime
               </div>
