@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import './VapiSettings.css';
 
 interface VapiCredentials {
@@ -28,7 +29,8 @@ const VapiSettings: React.FC = () => {
     
     setLoading(true);
     try {
-      const token = await user.getJWTToken();
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -60,7 +62,8 @@ const VapiSettings: React.FC = () => {
     setMessage(null);
 
     try {
-      const token = await user.getJWTToken();
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
         method: 'POST',
         headers: {
@@ -99,7 +102,8 @@ const VapiSettings: React.FC = () => {
     setMessage(null);
 
     try {
-      const token = await user.getJWTToken();
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
         method: 'DELETE',
         headers: {

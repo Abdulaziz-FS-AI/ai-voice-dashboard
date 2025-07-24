@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import './VoiceAgentEditor.css';
 
 interface VapiAssistant {
@@ -73,6 +74,7 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
 
   useEffect(() => {
     fetchAssistants();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchAssistants = async () => {
@@ -80,7 +82,8 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
     
     setLoading(true);
     try {
-      const token = await user.getJWTToken();
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/assistants`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -185,7 +188,8 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
       // Build VAPI assistant configuration
       const vapiConfig = buildVapiConfig(config);
       
-      const token = await user.getJWTToken();
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/assistants/${selectedAssistant.id}`, {
         method: 'PATCH',
         headers: {
