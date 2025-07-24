@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { UserButton } from '@clerk/clerk-react';
 import './Dashboard.css';
 
 interface CallLog {
@@ -137,7 +136,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <button className="config-button" onClick={() => onNavigate('editor')}>
             Configure AI Agent
           </button>
-          <UserButton afterSignOutUrl="/" />
         </div>
       </div>
 

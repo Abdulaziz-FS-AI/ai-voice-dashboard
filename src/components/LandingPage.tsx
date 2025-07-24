@@ -1,12 +1,11 @@
 import React from 'react';
-import { SignInButton, SignUpButton } from '@clerk/clerk-react';
 import './LandingPage.css';
 
 interface LandingPageProps {
-  onTestLogin: () => void;
+  onGetStarted: () => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onTestLogin }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
   return (
     <div className="landing-page">
       {/* Navigation */}
@@ -20,10 +19,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onTestLogin }) => {
             <a href="#features" className="nav-link">Features</a>
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
-            <button className="nav-test" onClick={onTestLogin}>Test</button>
-            <SignInButton mode="modal">
-              <button className="nav-cta">Get Started</button>
-            </SignInButton>
+            <button className="nav-cta" onClick={onGetStarted}>Get Started</button>
           </div>
         </div>
       </nav>
@@ -44,18 +40,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onTestLogin }) => {
               Monitor, analyze, and optimize your voice agents with real-time insights and powerful analytics.
             </p>
             <div className="hero-actions">
-              <SignUpButton mode="modal">
-                <button className="cta-primary">
-                  Start Free Trial
-                  <span className="cta-arrow">→</span>
-                </button>
-              </SignUpButton>
+              <button className="cta-primary" onClick={onGetStarted}>
+                Start Free Trial
+                <span className="cta-arrow">→</span>
+              </button>
               <button className="cta-secondary">
                 Watch Demo
                 <span className="play-icon">▶</span>
-              </button>
-              <button className="cta-test" onClick={onTestLogin}>
-                Test Demo
               </button>
             </div>
             <div className="hero-stats">
@@ -220,12 +211,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onTestLogin }) => {
               Join thousands of companies already using Voice Matrix to deliver exceptional customer experiences.
             </p>
             <div className="cta-actions">
-              <SignUpButton mode="modal">
-                <button className="cta-primary large">
-                  Start Your Free Trial
-                  <span className="cta-arrow">→</span>
-                </button>
-              </SignUpButton>
+              <button className="cta-primary large" onClick={onGetStarted}>
+                Start Your Free Trial
+                <span className="cta-arrow">→</span>
+              </button>
               <div className="cta-note">
                 No credit card required • 14-day free trial • Cancel anytime
               </div>

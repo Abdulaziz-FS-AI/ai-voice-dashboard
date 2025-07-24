@@ -3,26 +3,23 @@ import LandingPage from './components/LandingPage';
 import PinLogin from './components/PinLogin';
 import Dashboard from './components/Dashboard';
 import VoiceAgentEditor from './components/VoiceAgentEditor';
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
 import './App.css';
 
-type Page = 'landing' | 'test-login' | 'dashboard' | 'editor';
+type Page = 'landing' | 'login' | 'dashboard' | 'editor';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [, setAgentConfig] = useState<any>(null);
-  const [isTestMode, setIsTestMode] = useState(false);
 
   const handleNavigate = (page: 'dashboard' | 'editor') => {
     setCurrentPage(page);
   };
 
-  const handleTestLogin = () => {
-    setCurrentPage('test-login');
+  const handleGetStarted = () => {
+    setCurrentPage('login');
   };
 
-  const handlePinLogin = () => {
-    setIsTestMode(true);
+  const handleLogin = () => {
     setCurrentPage('dashboard');
   };
 
@@ -31,33 +28,24 @@ function App() {
     console.log('Agent configuration saved:', config);
   };
 
-  const renderAuthenticatedContent = () => {
+  const renderCurrentPage = () => {
     switch (currentPage) {
+      case 'landing':
+        return <LandingPage onGetStarted={handleGetStarted} />;
+      case 'login':
+        return <PinLogin onLogin={handleLogin} />;
       case 'dashboard':
         return <Dashboard onNavigate={handleNavigate} />;
       case 'editor':
         return <VoiceAgentEditor onSave={handleSaveConfig} onNavigate={handleNavigate} />;
       default:
-        return <Dashboard onNavigate={handleNavigate} />;
+        return <LandingPage onGetStarted={handleGetStarted} />;
     }
   };
 
   return (
     <div className="App">
-      <SignedOut>
-        {currentPage === 'test-login' ? (
-          <PinLogin onLogin={handlePinLogin} />
-        ) : isTestMode && currentPage === 'dashboard' ? (
-          renderAuthenticatedContent()
-        ) : isTestMode && currentPage === 'editor' ? (
-          renderAuthenticatedContent()
-        ) : (
-          <LandingPage onTestLogin={handleTestLogin} />
-        )}
-      </SignedOut>
-      <SignedIn>
-        {renderAuthenticatedContent()}
-      </SignedIn>
+      {renderCurrentPage()}
     </div>
   );
 }
