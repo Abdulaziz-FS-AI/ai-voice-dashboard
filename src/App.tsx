@@ -3,11 +3,12 @@ import LandingPage from './components/LandingPage';
 import PinLogin from './components/PinLogin';
 import Dashboard from './components/Dashboard';
 import VoiceAgentEditor from './components/VoiceAgentEditor';
+import DiagnosticPage from './components/DiagnosticPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 
-type Page = 'landing' | 'login' | 'dashboard' | 'editor';
+type Page = 'landing' | 'login' | 'dashboard' | 'editor' | 'diagnostic';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -16,7 +17,20 @@ const AppContent: React.FC = () => {
   const [testMode, setTestMode] = useState(false);
   const { user, loading } = useAuth();
 
-  const handleNavigate = (page: 'dashboard' | 'editor') => {
+  // Secret diagnostic access
+  React.useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+        console.log('🔍 Opening diagnostic page...');
+        setCurrentPage('diagnostic');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  const handleNavigate = (page: 'dashboard' | 'editor' | 'diagnostic') => {
     setCurrentPage(page);
   };
 
@@ -55,6 +69,8 @@ const AppContent: React.FC = () => {
         return <Dashboard onNavigate={handleNavigate} testMode={testMode} />;
       case 'editor':
         return <VoiceAgentEditor onSave={handleSaveConfig} onNavigate={handleNavigate} testMode={testMode} />;
+      case 'diagnostic':
+        return <DiagnosticPage />;
       default:
         return <Dashboard onNavigate={handleNavigate} testMode={testMode} />;
     }
