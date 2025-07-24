@@ -13,6 +13,7 @@ const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [, setAgentConfig] = useState<any>(null);
   const [showTestLogin, setShowTestLogin] = useState(false);
+  const [testMode, setTestMode] = useState(false);
   const { user, loading } = useAuth();
 
   const handleNavigate = (page: 'dashboard' | 'editor') => {
@@ -29,6 +30,7 @@ const AppContent: React.FC = () => {
 
   const handlePinLogin = () => {
     setShowTestLogin(false);
+    setTestMode(true);
     setCurrentPage('dashboard');
   };
 
@@ -46,15 +48,15 @@ const AppContent: React.FC = () => {
     return <PinLogin onLogin={handlePinLogin} onBack={() => setShowTestLogin(false)} />;
   }
 
-  // Show authenticated content if user is logged in
-  if (user) {
+  // Show authenticated content if user is logged in OR in test mode
+  if (user || testMode) {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard onNavigate={handleNavigate} />;
+        return <Dashboard onNavigate={handleNavigate} testMode={testMode} />;
       case 'editor':
-        return <VoiceAgentEditor onSave={handleSaveConfig} onNavigate={handleNavigate} />;
+        return <VoiceAgentEditor onSave={handleSaveConfig} onNavigate={handleNavigate} testMode={testMode} />;
       default:
-        return <Dashboard onNavigate={handleNavigate} />;
+        return <Dashboard onNavigate={handleNavigate} testMode={testMode} />;
     }
   }
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import VapiSettings from './VapiSettings';
 import './Dashboard.css';
 
 interface CallLog {
@@ -16,11 +17,13 @@ interface CallLog {
 
 interface DashboardProps {
   onNavigate: (page: 'dashboard' | 'editor') => void;
+  testMode?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onNavigate, testMode = false }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings'>('dashboard');
   const { user, logout } = useAuth();
 
   // Mock data
@@ -108,6 +111,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     return '#dc3545';
   };
 
+  if (currentView === 'vapi-settings') {
+    return <VapiSettings onBack={() => setCurrentView('dashboard')} testMode={testMode} />;
+  }
+
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
@@ -137,6 +144,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           </select>
           <button className="config-button" onClick={() => onNavigate('editor')}>
             Configure AI Agent
+          </button>
+          <button className="settings-button" onClick={() => setCurrentView('vapi-settings')}>
+            VAPI Settings
           </button>
           {user && (
             <div className="user-section">

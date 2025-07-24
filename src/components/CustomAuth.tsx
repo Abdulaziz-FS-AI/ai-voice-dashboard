@@ -35,10 +35,27 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
     setLoading(false);
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      await signIn({ provider: 'Google' });
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Google sign in failed');
+    }
+    setLoading(false);
+  };
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+    if (password.length < 7) {
+      setError('Password must be at least 7 characters long');
       return;
     }
     
@@ -102,6 +119,10 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
       setError('Passwords do not match');
       return;
     }
+    if (password.length < 7) {
+      setError('Password must be at least 7 characters long');
+      return;
+    }
     
     setLoading(true);
     setError('');
@@ -158,6 +179,20 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         </button>
       </form>
       
+      <div className="auth-divider">
+        <span>or</span>
+      </div>
+      
+      <button 
+        type="button" 
+        className="auth-button google" 
+        onClick={handleGoogleSignIn}
+        disabled={loading}
+      >
+        <span className="google-icon">🇬</span>
+        {loading ? <span className="spinner"></span> : 'Continue with Google'}
+      </button>
+      
       <div className="auth-links">
         <button type="button" className="link-button" onClick={() => setAuthState('forgot')}>
           Forgot your password?
@@ -193,13 +228,14 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         </div>
         
         <div className="form-field">
-          <label htmlFor="signup-password">Password</label>
+          <label htmlFor="signup-password">Password (minimum 7 characters)</label>
           <input
             id="signup-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Create a password"
+            placeholder="Create a password (minimum 7 characters)"
+            minLength={7}
             required
           />
         </div>
@@ -322,13 +358,14 @@ const CustomAuth: React.FC<CustomAuthProps> = ({ onSuccess, onBack }) => {
         </div>
         
         <div className="form-field">
-          <label htmlFor="new-password">New Password</label>
+          <label htmlFor="new-password">New Password (minimum 7 characters)</label>
           <input
             id="new-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter new password"
+            placeholder="Enter new password (minimum 7 characters)"
+            minLength={7}
             required
           />
         </div>

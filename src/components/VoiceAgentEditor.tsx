@@ -43,9 +43,10 @@ interface Question {
 interface VoiceAgentEditorProps {
   onSave: (config: AgentConfig) => void;
   onNavigate: (page: 'dashboard' | 'editor') => void;
+  testMode?: boolean;
 }
 
-const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate }) => {
+const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate, testMode = false }) => {
   const { user } = useAuth();
   const [assistants, setAssistants] = useState<VapiAssistant[]>([]);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
@@ -78,6 +79,25 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
   }, []);
 
   const fetchAssistants = async () => {
+    if (testMode) {
+      // In test mode, use mock data
+      const mockAssistants = [
+        {
+          id: 'test-assistant-1',
+          name: 'Test Voice Assistant',
+          model: { provider: 'openai', model: 'gpt-4', messages: [{ role: 'system', content: 'You are a professional AI assistant.' }] },
+          voice: { provider: 'playht', voiceId: 'jennifer' },
+          firstMessage: 'Hello! How can I help you today?',
+          metadata: { companyName: 'Voice Matrix', questions: [] }
+        }
+      ];
+      setAssistants(mockAssistants);
+      setSelectedAssistant(mockAssistants[0]);
+      loadAssistantConfig(mockAssistants[0]);
+      setLoading(false);
+      return;
+    }
+
     if (!user) return;
     
     setLoading(true);
@@ -179,12 +199,24 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate 
   };
 
   const handleSave = async () => {
-    if (!selectedAssistant || !user) return;
+    if (!selectedAssistant) return;
 
     setSaving(true);
     setMessage(null);
 
     try {
+      if (testMode) {
+        // In test mode, just simulate saving
+        setTimeout(() => {
+          setMessage({ type: 'success', text: 'Test configuration saved successfully!' });
+          onSave(config);
+          setSaving(false);
+        }, 1000);
+        return;
+      }
+
+      if (!user) return;
+
       // Build VAPI assistant configuration
       const vapiConfig = buildVapiConfig(config);
       
