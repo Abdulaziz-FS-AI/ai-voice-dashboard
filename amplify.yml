@@ -3,9 +3,11 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm install --force
+        - echo "Installing dependencies with peer dependency overrides..."
+        - npm install --legacy-peer-deps --force
     build:
       commands:
+        - echo "Building application..."
         - npm run build
   artifacts:
     baseDirectory: build

@@ -4,7 +4,6 @@ import PinLogin from './components/PinLogin';
 import Dashboard from './components/Dashboard';
 import VoiceAgentEditor from './components/VoiceAgentEditor';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Authenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 
