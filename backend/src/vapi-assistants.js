@@ -1,88 +1,116 @@
 const AWS = require('aws-sdk');
 const axios = require('axios');
+const crypto = require('crypto');
+
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-exports.getAssistants = async (event) => {
-    try {
-        const userId = event.requestContext.authorizer.claims.sub;
-        
-        // Get user's VAPI credentials from DynamoDB
-        const userParams = {
-            TableName: process.env.USERS_TABLE,
-            Key: { userId }
-        };
-        const userData = await dynamodb.get(userParams).promise();
-        
-        if (!userData.Item?.vapiApiKey) {
-            return {
-                statusCode: 400,
-                headers: { 'Access-Control-Allow-Origin': '*' },
-                body: JSON.stringify({ error: 'VAPI API key not configured' })
-            };
-        }
-        
-        // Call VAPI API to get assistants
-        const vapiResponse = await axios.get('https://api.vapi.ai/assistant', {
-            headers: {
-                'Authorization': `Bearer ${userData.Item.vapiApiKey}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        return {
-            statusCode: 200,
-            headers: { 'Access-Control-Allow-Origin': '*' },
-            body: JSON.stringify(vapiResponse.data)
-        };
-    } catch (error) {
-        console.error('Error fetching VAPI assistants:', error);
-        return {
-            statusCode: 500,
-            headers: { 'Access-Control-Allow-Origin': '*' },
-            body: JSON.stringify({ error: error.message })
-        };
-    }
-};
+// Use the VAPI API key from environment (admin key)
+const VAPI_API_KEY = process.env.VAPI_API_KEY;
+const VAPI_BASE_URL = 'https://api.vapi.ai';
 
+// Helper function to call VAPI API
+async function callVapiApi(endpoint, method, data = null) {
+    const config = {
+        method,
+        url: `${VAPI_BASE_URL}${endpoint}`,
+        headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
+            'Content-Type': 'application/json'
+        }
+    };
+    
+    if (data) {
+        config.data = data;
+    }
+    
+    const response = await axios(config);
+    return response.data;
+}
+
+// Create a new assistant for a user
 exports.createAssistant = async (event) => {
     try {
         const userId = event.requestContext.authorizer.claims.sub;
-        const assistantConfig = JSON.parse(event.body);
+        const { templateId, name, customConfig } = JSON.parse(event.body);
         
-        // Get user's VAPI credentials
-        const userParams = {
-            TableName: process.env.USERS_TABLE,
-            Key: { userId }
-        };
-        const userData = await dynamodb.get(userParams).promise();
+        let assistantConfig;
         
-        if (!userData.Item?.vapiApiKey) {
-            return {
-                statusCode: 400,
-                headers: { 'Access-Control-Allow-Origin': '*' },
-                body: JSON.stringify({ error: 'VAPI API key not configured' })
+        // If templateId is provided, clone from template
+        if (templateId) {
+            // Get template from VAPI
+            const template = await callVapiApi(`/assistant/${templateId}`, 'GET');
+            
+            // Create new assistant based on template
+            assistantConfig = {
+                ...template,
+                name: name || `${template.name} - ${userId}`,
+                metadata: {
+                    ...template.metadata,
+                    userId,
+                    createdFrom: templateId,
+                    createdAt: new Date().toISOString()
+                }
+            };
+            
+            // Remove the ID to create a new assistant
+            delete assistantConfig.id;
+        } else {
+            // Create from scratch with custom config
+            assistantConfig = {
+                ...customConfig,
+                name,
+                metadata: {
+                    ...customConfig.metadata,
+                    userId,
+                    createdAt: new Date().toISOString()
+                }
             };
         }
         
-        // Create assistant via VAPI API
-        const vapiResponse = await axios.post(
-            'https://api.vapi.ai/assistant',
-            assistantConfig,
-            {
-                headers: {
-                    'Authorization': `Bearer ${userData.Item.vapiApiKey}`,
-                    'Content-Type': 'application/json'
+        // Create assistant in VAPI
+        const vapiAssistant = await callVapiApi('/assistant', 'POST', assistantConfig);
+        
+        // Store in DynamoDB for tracking
+        const dbItem = {
+            userId,
+            assistantId: vapiAssistant.id,
+            name: vapiAssistant.name,
+            createdAt: new Date().toISOString(),
+            templateId: templateId || null,
+            status: 'active',
+            phoneNumber: null // Not linked yet
+        };
+        
+        await dynamodb.put({
+            TableName: process.env.USER_ASSISTANTS_TABLE,
+            Item: dbItem
+        }).promise();
+        
+        // Store in assistants table if it's a template
+        if (customConfig?.isTemplate) {
+            await dynamodb.put({
+                TableName: process.env.ASSISTANTS_TABLE,
+                Item: {
+                    assistantId: vapiAssistant.id,
+                    templateName: vapiAssistant.name,
+                    description: customConfig.description || '',
+                    createdBy: userId,
+                    createdAt: new Date().toISOString(),
+                    isTemplate: true
                 }
-            }
-        );
+            }).promise();
+        }
         
         return {
             statusCode: 201,
             headers: { 'Access-Control-Allow-Origin': '*' },
-            body: JSON.stringify(vapiResponse.data)
+            body: JSON.stringify({
+                ...vapiAssistant,
+                phoneNumber: null
+            })
         };
     } catch (error) {
-        console.error('Error creating VAPI assistant:', error);
+        console.error('Error creating assistant:', error);
         return {
             statusCode: 500,
             headers: { 'Access-Control-Allow-Origin': '*' },
@@ -91,46 +119,75 @@ exports.createAssistant = async (event) => {
     }
 };
 
-exports.updateAssistant = async (event) => {
+// Get user's assistants
+exports.getAssistants = async (event) => {
     try {
         const userId = event.requestContext.authorizer.claims.sub;
-        const assistantId = event.pathParameters.assistantId;
-        const assistantConfig = JSON.parse(event.body);
+        const { includeTemplates } = event.queryStringParameters || {};
         
-        // Get user's VAPI credentials
-        const userParams = {
-            TableName: process.env.USERS_TABLE,
-            Key: { userId }
-        };
-        const userData = await dynamodb.get(userParams).promise();
-        
-        if (!userData.Item?.vapiApiKey) {
-            return {
-                statusCode: 400,
-                headers: { 'Access-Control-Allow-Origin': '*' },
-                body: JSON.stringify({ error: 'VAPI API key not configured' })
-            };
-        }
-        
-        // Update assistant via VAPI API
-        const vapiResponse = await axios.patch(
-            `https://api.vapi.ai/assistant/${assistantId}`,
-            assistantConfig,
-            {
-                headers: {
-                    'Authorization': `Bearer ${userData.Item.vapiApiKey}`,
-                    'Content-Type': 'application/json'
-                }
+        // Get user's assistants from DynamoDB
+        const params = {
+            TableName: process.env.USER_ASSISTANTS_TABLE,
+            KeyConditionExpression: 'userId = :userId',
+            ExpressionAttributeValues: {
+                ':userId': userId
             }
-        );
+        };
+        
+        const userAssistants = await dynamodb.query(params).promise();
+        
+        // Get full details from VAPI for each assistant
+        const assistantPromises = userAssistants.Items.map(async (item) => {
+            try {
+                const vapiAssistant = await callVapiApi(`/assistant/${item.assistantId}`, 'GET');
+                return {
+                    ...vapiAssistant,
+                    phoneNumber: item.phoneNumber,
+                    status: item.status
+                };
+            } catch (error) {
+                console.error(`Failed to fetch assistant ${item.assistantId}:`, error);
+                return null;
+            }
+        });
+        
+        let assistants = (await Promise.all(assistantPromises)).filter(Boolean);
+        
+        // Include templates if requested (for admin)
+        if (includeTemplates === 'true') {
+            const templatesResult = await dynamodb.scan({
+                TableName: process.env.ASSISTANTS_TABLE,
+                FilterExpression: 'isTemplate = :true',
+                ExpressionAttributeValues: {
+                    ':true': true
+                }
+            }).promise();
+            
+            const templatePromises = templatesResult.Items.map(async (item) => {
+                try {
+                    const vapiAssistant = await callVapiApi(`/assistant/${item.assistantId}`, 'GET');
+                    return {
+                        ...vapiAssistant,
+                        isTemplate: true,
+                        templateName: item.templateName
+                    };
+                } catch (error) {
+                    console.error(`Failed to fetch template ${item.assistantId}:`, error);
+                    return null;
+                }
+            });
+            
+            const templates = (await Promise.all(templatePromises)).filter(Boolean);
+            assistants = [...assistants, ...templates];
+        }
         
         return {
             statusCode: 200,
             headers: { 'Access-Control-Allow-Origin': '*' },
-            body: JSON.stringify(vapiResponse.data)
+            body: JSON.stringify(assistants)
         };
     } catch (error) {
-        console.error('Error updating VAPI assistant:', error);
+        console.error('Error fetching assistants:', error);
         return {
             statusCode: 500,
             headers: { 'Access-Control-Allow-Origin': '*' },
@@ -139,33 +196,98 @@ exports.updateAssistant = async (event) => {
     }
 };
 
+// Update assistant
+exports.updateAssistant = async (event) => {
+    try {
+        const userId = event.requestContext.authorizer.claims.sub;
+        const assistantId = event.pathParameters.assistantId;
+        const updateData = JSON.parse(event.body);
+        
+        // Verify user owns this assistant
+        const ownership = await dynamodb.get({
+            TableName: process.env.USER_ASSISTANTS_TABLE,
+            Key: { userId, assistantId }
+        }).promise();
+        
+        if (!ownership.Item) {
+            return {
+                statusCode: 403,
+                headers: { 'Access-Control-Allow-Origin': '*' },
+                body: JSON.stringify({ error: 'Unauthorized' })
+            };
+        }
+        
+        // Update in VAPI
+        const updatedAssistant = await callVapiApi(`/assistant/${assistantId}`, 'PATCH', updateData);
+        
+        // Update metadata in DynamoDB if needed
+        if (updateData.name) {
+            await dynamodb.update({
+                TableName: process.env.USER_ASSISTANTS_TABLE,
+                Key: { userId, assistantId },
+                UpdateExpression: 'SET #name = :name, updatedAt = :updatedAt',
+                ExpressionAttributeNames: {
+                    '#name': 'name'
+                },
+                ExpressionAttributeValues: {
+                    ':name': updateData.name,
+                    ':updatedAt': new Date().toISOString()
+                }
+            }).promise();
+        }
+        
+        return {
+            statusCode: 200,
+            headers: { 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify(updatedAssistant)
+        };
+    } catch (error) {
+        console.error('Error updating assistant:', error);
+        return {
+            statusCode: 500,
+            headers: { 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify({ error: error.message })
+        };
+    }
+};
+
+// Delete assistant
 exports.deleteAssistant = async (event) => {
     try {
         const userId = event.requestContext.authorizer.claims.sub;
         const assistantId = event.pathParameters.assistantId;
         
-        // Get user's VAPI credentials
-        const userParams = {
-            TableName: process.env.USERS_TABLE,
-            Key: { userId }
-        };
-        const userData = await dynamodb.get(userParams).promise();
+        // Verify user owns this assistant
+        const ownership = await dynamodb.get({
+            TableName: process.env.USER_ASSISTANTS_TABLE,
+            Key: { userId, assistantId }
+        }).promise();
         
-        if (!userData.Item?.vapiApiKey) {
+        if (!ownership.Item) {
             return {
-                statusCode: 400,
+                statusCode: 403,
                 headers: { 'Access-Control-Allow-Origin': '*' },
-                body: JSON.stringify({ error: 'VAPI API key not configured' })
+                body: JSON.stringify({ error: 'Unauthorized' })
             };
         }
         
-        // Delete assistant via VAPI API
-        await axios.delete(`https://api.vapi.ai/assistant/${assistantId}`, {
-            headers: {
-                'Authorization': `Bearer ${userData.Item.vapiApiKey}`,
-                'Content-Type': 'application/json'
-            }
-        });
+        // Check if phone number is linked
+        if (ownership.Item.phoneNumber) {
+            return {
+                statusCode: 400,
+                headers: { 'Access-Control-Allow-Origin': '*' },
+                body: JSON.stringify({ error: 'Cannot delete assistant with linked phone number. Unlink phone first.' })
+            };
+        }
+        
+        // Delete from VAPI
+        await callVapiApi(`/assistant/${assistantId}`, 'DELETE');
+        
+        // Delete from DynamoDB
+        await dynamodb.delete({
+            TableName: process.env.USER_ASSISTANTS_TABLE,
+            Key: { userId, assistantId }
+        }).promise();
         
         return {
             statusCode: 204,
@@ -173,7 +295,7 @@ exports.deleteAssistant = async (event) => {
             body: ''
         };
     } catch (error) {
-        console.error('Error deleting VAPI assistant:', error);
+        console.error('Error deleting assistant:', error);
         return {
             statusCode: 500,
             headers: { 'Access-Control-Allow-Origin': '*' },
@@ -182,45 +304,127 @@ exports.deleteAssistant = async (event) => {
     }
 };
 
-exports.getVapiCalls = async (event) => {
+// Link phone number to assistant
+exports.linkPhoneToAssistant = async (event) => {
     try {
         const userId = event.requestContext.authorizer.claims.sub;
-        const { limit = 50, cursor } = event.queryStringParameters || {};
+        const assistantId = event.pathParameters.assistantId;
+        const { phoneNumber, phoneNumberId } = JSON.parse(event.body);
         
-        // Get user's VAPI credentials
-        const userParams = {
-            TableName: process.env.USERS_TABLE,
-            Key: { userId }
-        };
-        const userData = await dynamodb.get(userParams).promise();
+        // Verify user owns this assistant
+        const ownership = await dynamodb.get({
+            TableName: process.env.USER_ASSISTANTS_TABLE,
+            Key: { userId, assistantId }
+        }).promise();
         
-        if (!userData.Item?.vapiApiKey) {
+        if (!ownership.Item) {
             return {
-                statusCode: 400,
+                statusCode: 403,
                 headers: { 'Access-Control-Allow-Origin': '*' },
-                body: JSON.stringify({ error: 'VAPI API key not configured' })
+                body: JSON.stringify({ error: 'Unauthorized' })
             };
         }
         
-        // Get calls from VAPI API
-        const params = { limit };
-        if (cursor) params.cursor = cursor;
+        // Verify user owns this phone number
+        const phoneOwnership = await dynamodb.get({
+            TableName: process.env.PHONE_NUMBERS_TABLE,
+            Key: { phoneNumberId }
+        }).promise();
         
-        const vapiResponse = await axios.get('https://api.vapi.ai/call', {
-            headers: {
-                'Authorization': `Bearer ${userData.Item.vapiApiKey}`,
-                'Content-Type': 'application/json'
-            },
-            params
+        if (!phoneOwnership.Item || phoneOwnership.Item.userId !== userId) {
+            return {
+                statusCode: 403,
+                headers: { 'Access-Control-Allow-Origin': '*' },
+                body: JSON.stringify({ error: 'Unauthorized phone number' })
+            };
+        }
+        
+        // Update phone number in VAPI to use this assistant
+        await callVapiApi(`/phone-number/${phoneNumberId}`, 'PATCH', {
+            assistantId
         });
+        
+        // Update DynamoDB records
+        await Promise.all([
+            // Update user assistant record
+            dynamodb.update({
+                TableName: process.env.USER_ASSISTANTS_TABLE,
+                Key: { userId, assistantId },
+                UpdateExpression: 'SET phoneNumber = :phoneNumber, updatedAt = :updatedAt',
+                ExpressionAttributeValues: {
+                    ':phoneNumber': phoneNumber,
+                    ':updatedAt': new Date().toISOString()
+                }
+            }).promise(),
+            
+            // Update phone number record
+            dynamodb.update({
+                TableName: process.env.PHONE_NUMBERS_TABLE,
+                Key: { phoneNumberId },
+                UpdateExpression: 'SET assistantId = :assistantId, updatedAt = :updatedAt',
+                ExpressionAttributeValues: {
+                    ':assistantId': assistantId,
+                    ':updatedAt': new Date().toISOString()
+                }
+            }).promise()
+        ]);
         
         return {
             statusCode: 200,
             headers: { 'Access-Control-Allow-Origin': '*' },
-            body: JSON.stringify(vapiResponse.data)
+            body: JSON.stringify({
+                message: 'Phone number linked successfully',
+                assistantId,
+                phoneNumber
+            })
         };
     } catch (error) {
-        console.error('Error fetching VAPI calls:', error);
+        console.error('Error linking phone to assistant:', error);
+        return {
+            statusCode: 500,
+            headers: { 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify({ error: error.message })
+        };
+    }
+};
+
+// Get available templates (for users to clone)
+exports.getTemplates = async (event) => {
+    try {
+        // Get all templates
+        const templatesResult = await dynamodb.scan({
+            TableName: process.env.ASSISTANTS_TABLE,
+            FilterExpression: 'isTemplate = :true',
+            ExpressionAttributeValues: {
+                ':true': true
+            }
+        }).promise();
+        
+        // Get full details from VAPI
+        const templatePromises = templatesResult.Items.map(async (item) => {
+            try {
+                const vapiAssistant = await callVapiApi(`/assistant/${item.assistantId}`, 'GET');
+                return {
+                    ...vapiAssistant,
+                    isTemplate: true,
+                    templateName: item.templateName,
+                    description: item.description
+                };
+            } catch (error) {
+                console.error(`Failed to fetch template ${item.assistantId}:`, error);
+                return null;
+            }
+        });
+        
+        const templates = (await Promise.all(templatePromises)).filter(Boolean);
+        
+        return {
+            statusCode: 200,
+            headers: { 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify(templates)
+        };
+    } catch (error) {
+        console.error('Error fetching templates:', error);
         return {
             statusCode: 500,
             headers: { 'Access-Control-Allow-Origin': '*' },

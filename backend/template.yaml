@@ -14,8 +14,10 @@ Globals:
         ANALYTICS_TABLE: voice-matrix-analytics
         VAPI_SYNC_TABLE: voice-matrix-vapi-sync
         PHONE_NUMBERS_TABLE: voice-matrix-phone-numbers
+        ASSISTANTS_TABLE: voice-matrix-assistants
+        USER_ASSISTANTS_TABLE: voice-matrix-user-assistants
         ENCRYPTION_KEY: !Ref EncryptionKey
-        VAPI_API_TOKEN: !Ref VapiApiToken
+        VAPI_API_KEY: !Ref VapiApiKey
         TWILIO_CREDENTIAL_ID: !Ref TwilioCredentialId
 
 Parameters:
@@ -25,11 +27,11 @@ Parameters:
     NoEcho: true
     Default: "your-32-byte-encryption-key-here"
   
-  VapiApiToken:
+  VapiApiKey:
     Type: String
-    Description: VAPI API token for phone number provisioning
+    Description: VAPI API key for assistant and phone management
     NoEcho: true
-    Default: "your-vapi-api-token"
+    Default: "661b91f4-60e3-457e-820a-1dc7987b2b1c"
   
   TwilioCredentialId:
     Type: String
@@ -214,6 +216,115 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UsersTable
+
+  # Assistant Management Functions
+  CreateAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.createAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AssistantsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserAssistantsTable
+
+  GetAssistants:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.getAssistants
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AssistantsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAssistantsTable
+
+  UpdateAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.updateAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants/{assistantId}
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AssistantsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserAssistantsTable
+
+  DeleteAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.deleteAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants/{assistantId}
+            Method: DELETE
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AssistantsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserAssistantsTable
+
+  LinkPhoneToAssistant:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.linkPhoneToAssistant
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/assistants/{assistantId}/link-phone
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserAssistantsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhoneNumbersTable
+
+  GetAssistantTemplates:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-assistants.getTemplates
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/templates
+            Method: GET
+            Auth:
+              Authorizer: NONE
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AssistantsTable
 
   # Phone Number Management Functions
   CreateVapiPhoneNumber:
@@ -487,6 +598,52 @@ Resources:
         - IndexName: userId-index
           KeySchema:
             - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+
+  AssistantsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-assistants
+      AttributeDefinitions:
+        - AttributeName: assistantId
+          AttributeType: S
+        - AttributeName: templateName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: assistantId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: template-index
+          KeySchema:
+            - AttributeName: templateName
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+
+  UserAssistantsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-user-assistants
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: assistantId
+          AttributeType: S
+        - AttributeName: phoneNumber
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: assistantId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: phoneNumber-index
+          KeySchema:
+            - AttributeName: phoneNumber
               KeyType: HASH
           Projection:
             ProjectionType: ALL

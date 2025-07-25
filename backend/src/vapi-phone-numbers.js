@@ -5,9 +5,10 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({ region: process.env.REGION })
 const USERS_TABLE = process.env.USERS_TABLE;
 const PHONE_NUMBERS_TABLE = process.env.PHONE_NUMBERS_TABLE || 'voice-matrix-phone-numbers';
 
-// Your master VAPI API token (should be in environment variables)
-const VAPI_API_TOKEN = process.env.VAPI_API_TOKEN;
+// Admin's VAPI API key for all operations
+const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const VAPI_BASE_URL = 'https://api.vapi.ai';
+const TWILIO_CREDENTIAL_ID = process.env.TWILIO_CREDENTIAL_ID;
 
 // Encryption utilities
 function encrypt(text) {
@@ -38,7 +39,7 @@ async function callVapiApi(endpoint, method = 'GET', body = null) {
   const options = {
     method,
     headers: {
-      'Authorization': `Bearer ${VAPI_API_TOKEN}`,
+      'Authorization': `Bearer ${VAPI_API_KEY}`,
       'Content-Type': 'application/json'
     }
   };

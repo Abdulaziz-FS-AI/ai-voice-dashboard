@@ -12,6 +12,10 @@ export const API_CONFIG = {
     VAPI_ASSISTANTS: '/vapi/assistants',
     VAPI_CALLS: '/vapi/calls',
     VAPI_PHONE_NUMBERS: '/vapi/phone-numbers',
+    VAPI_TEMPLATES: '/vapi/templates',
+    VAPI_LINK_PHONE: (assistantId: string) => `/vapi/assistants/${assistantId}/link-phone`,
+    VAPI_UPDATE_ASSISTANT: (assistantId: string) => `/vapi/assistants/${assistantId}`,
+    VAPI_DELETE_ASSISTANT: (assistantId: string) => `/vapi/assistants/${assistantId}`,
     
     // Dashboard & Analytics
     DASHBOARD: '/dashboard',
