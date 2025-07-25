@@ -13,7 +13,10 @@ Globals:
         CALLS_TABLE: voice-matrix-calls
         ANALYTICS_TABLE: voice-matrix-analytics
         VAPI_SYNC_TABLE: voice-matrix-vapi-sync
+        PHONE_NUMBERS_TABLE: voice-matrix-phone-numbers
         ENCRYPTION_KEY: !Ref EncryptionKey
+        VAPI_API_TOKEN: !Ref VapiApiToken
+        TWILIO_CREDENTIAL_ID: !Ref TwilioCredentialId
 
 Parameters:
   EncryptionKey:
@@ -21,6 +24,18 @@ Parameters:
     Description: Encryption key for sensitive data
     NoEcho: true
     Default: "your-32-byte-encryption-key-here"
+  
+  VapiApiToken:
+    Type: String
+    Description: VAPI API token for phone number provisioning
+    NoEcho: true
+    Default: "your-vapi-api-token"
+  
+  TwilioCredentialId:
+    Type: String
+    Description: Twilio credential ID in VAPI for phone number provisioning
+    NoEcho: true
+    Default: "your-twilio-credential-id"
 
 Resources:
   # API Gateway
@@ -199,6 +214,75 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UsersTable
+
+  # Phone Number Management Functions
+  CreateVapiPhoneNumber:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-phone-numbers.createPhoneNumber
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/phone-numbers
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhoneNumbersTable
+
+  GetVapiPhoneNumber:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-phone-numbers.getPhoneNumber
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/phone-numbers
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PhoneNumbersTable
+
+  UpdateVapiPhoneNumber:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-phone-numbers.updatePhoneNumber
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/phone-numbers/{phoneNumberId}
+            Method: PATCH
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhoneNumbersTable
+
+  DeleteVapiPhoneNumber:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: vapi-phone-numbers.deletePhoneNumber
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VoiceMatrixApi
+            Path: /vapi/phone-numbers/{phoneNumberId}
+            Method: DELETE
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhoneNumbersTable
 
   # VAPI Webhook Handler (No Auth Required)
   VapiWebhookHandler:
@@ -385,6 +469,27 @@ Resources:
           KeyType: HASH
         - AttributeName: syncType
           KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+  PhoneNumbersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice-matrix-phone-numbers
+      AttributeDefinitions:
+        - AttributeName: phoneNumberId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: phoneNumberId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
       BillingMode: PAY_PER_REQUEST
 
 Outputs:

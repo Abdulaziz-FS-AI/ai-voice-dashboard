@@ -47,6 +47,33 @@
   align-items: center;
 }
 
+/* Phone Number Display */
+.phone-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #f8f9fa;
+}
+
+.phone-number {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.change-phone-button {
+  padding: 4px 8px !important;
+  min-width: auto !important;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.phone-setup-button {
+  white-space: nowrap;
+}
+
 .period-selector {
   padding: 8px 12px;
   border: 2px solid #e9ecef;

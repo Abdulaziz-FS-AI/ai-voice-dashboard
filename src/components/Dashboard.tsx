@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { isAuthorizedAdmin, hasVapiPermission } from '../utils/adminConfig';
 import VapiSettings from './VapiSettings';
 import ThemeToggle from './ThemeToggle';
+import PhoneSetupModal from './PhoneSetupModal';
 import './Dashboard.css';
 
 interface CallLog {
@@ -38,11 +39,44 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings'>('dashboard');
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+  const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>(userPhone);
   const { user, userName, logout } = useAuth();
   const { } = useTheme();
 
   // Determine if user is admin
   const isUserAdmin = propIsAdmin || isAuthorizedAdmin(user, userName);
+
+  // Load user's phone number on mount
+  useEffect(() => {
+    if (user?.sub) {
+      loadUserPhoneNumber();
+    }
+  }, [user]);
+
+  const loadUserPhoneNumber = async () => {
+    try {
+      const token = localStorage.getItem('authToken') || 'demo-token';
+      const response = await fetch('/api/vapi/phone-numbers', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const phoneData = await response.json();
+        setCustomerPhoneNumber(phoneData.phoneNumber);
+      }
+    } catch (error) {
+      console.log('No phone number found or error loading:', error);
+    }
+  };
+
+  const handlePhoneCreated = (phoneNumber: string, phoneId: string) => {
+    setCustomerPhoneNumber(phoneNumber);
+    console.log('✅ Phone number created:', phoneNumber, phoneId);
+  };
 
   // Mock data
   const mockCallLogs: CallLog[] = [
@@ -173,6 +207,27 @@ const Dashboard: React.FC<DashboardProps> = ({
               <button className="config-button theme-button-secondary" onClick={() => onNavigate('editor')}>
                 Configure AI Agent
               </button>
+              
+              {!customerPhoneNumber ? (
+                <button 
+                  className="phone-setup-button theme-button" 
+                  onClick={() => setIsPhoneModalOpen(true)}
+                >
+                  📱 Get Phone Number
+                </button>
+              ) : (
+                <div className="phone-display">
+                  <span className="phone-number theme-text-primary">📱 {customerPhoneNumber}</span>
+                  <button 
+                    className="change-phone-button theme-button-secondary" 
+                    onClick={() => setIsPhoneModalOpen(true)}
+                    title="Change phone number"
+                  >
+                    ⚙️
+                  </button>
+                </div>
+              )}
+              
               <button className="settings-button theme-button-secondary" onClick={() => setCurrentView('vapi-settings')}>
                 🔑 VAPI Settings {isUserAdmin && '(Admin)'}
               </button>
@@ -384,6 +439,13 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       )}
+
+      <PhoneSetupModal
+        isOpen={isPhoneModalOpen}
+        onClose={() => setIsPhoneModalOpen(false)}
+        onPhoneCreated={handlePhoneCreated}
+        customerId={user?.sub || 'demo-customer'}
+      />
     </div>
   );
 };
