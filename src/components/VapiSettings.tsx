@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createVapiClient, validateVapiApiKey, assistantTemplates, VapiAssistant } from '../utils/vapiConfig';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import ThemeToggle from './ThemeToggle';
 import './VapiSettings.css';
 
 interface VapiSettingsProps {
@@ -9,6 +13,8 @@ interface VapiSettingsProps {
 }
 
 const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, isAdmin = false }) => {
+  const { user } = useAuth();
+  const { } = useTheme();
   const [apiKey, setApiKey] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [isValid, setIsValid] = useState<boolean | null>(null);
@@ -18,6 +24,76 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [accountInfo, setAccountInfo] = useState<any>(null);
+  const [editingAssistant, setEditingAssistant] = useState<VapiAssistant | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newAssistant, setNewAssistant] = useState<Partial<VapiAssistant>>({
+    name: '',
+    model: {
+      provider: 'openai',
+      model: 'gpt-3.5-turbo',
+      systemMessage: '',
+      temperature: 0.7
+    },
+    voice: {
+      provider: 'elevenlabs',
+      voiceId: 'rachel'
+    },
+    firstMessage: '',
+    recordingEnabled: true,
+    endCallMessage: ''
+  });
+
+  // Save API key to backend
+  const saveApiKeyToBackend = async (key: string) => {
+    if (!user || testMode) return;
+    
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey: key })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save API key to backend');
+      }
+    } catch (err) {
+      console.error('Error saving API key to backend:', err);
+      setError('API key validated but failed to save to backend');
+    }
+  };
+
+  // Load API key from backend
+  const loadApiKeyFromBackend = async () => {
+    if (!user || testMode) return null;
+    
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.apiKey;
+      }
+    } catch (err) {
+      console.error('Error loading API key from backend:', err);
+    }
+    
+    return null;
+  };
 
   const loadAssistants = useCallback(async (key: string) => {
     setLoading(true);
@@ -53,6 +129,7 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
       
       if (valid) {
         localStorage.setItem('vapi_api_key', key);
+        await saveApiKeyToBackend(key);
         await Promise.all([
           loadAssistants(key),
           loadAccountInfo(key)
@@ -66,16 +143,29 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
     } finally {
       setIsValidating(false);
     }
-  }, [loadAssistants, loadAccountInfo]);
+  }, [loadAssistants, loadAccountInfo, saveApiKeyToBackend]);
 
   // Load saved API key on mount
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('vapi_api_key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-      validateAndLoadAssistants(savedApiKey);
-    }
-  }, [validateAndLoadAssistants]);
+    const initializeApiKey = async () => {
+      // First try to load from backend
+      const backendKey = await loadApiKeyFromBackend();
+      if (backendKey) {
+        setApiKey(backendKey);
+        validateAndLoadAssistants(backendKey);
+        return;
+      }
+      
+      // Fallback to localStorage
+      const savedApiKey = localStorage.getItem('vapi_api_key');
+      if (savedApiKey) {
+        setApiKey(savedApiKey);
+        validateAndLoadAssistants(savedApiKey);
+      }
+    };
+
+    initializeApiKey();
+  }, [validateAndLoadAssistants, loadApiKeyFromBackend]);
 
   const handleApiKeySubmit = () => {
     if (apiKey.trim()) {
@@ -96,11 +186,72 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
       const client = createVapiClient({ apiKey });
       const newAssistant = await client.createAssistant(template);
       setAssistants(prev => [...prev, newAssistant]);
+      setError('');
       alert(`Assistant "${template.name}" created successfully!`);
     } catch (err: any) {
       setError(`Failed to create assistant: ${err.message || err}`);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const createCustomAssistant = async () => {
+    if (!apiKey || !isValid) {
+      setError('Please set a valid VAPI API key first');
+      return;
+    }
+
+    if (!newAssistant.name || !newAssistant.model?.systemMessage) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setIsCreating(true);
+    setError('');
+
+    try {
+      const client = createVapiClient({ apiKey });
+      const createdAssistant = await client.createAssistant(newAssistant as Omit<VapiAssistant, 'id'>);
+      setAssistants(prev => [...prev, createdAssistant]);
+      setShowCreateForm(false);
+      setNewAssistant({
+        name: '',
+        model: {
+          provider: 'openai',
+          model: 'gpt-3.5-turbo',
+          systemMessage: '',
+          temperature: 0.7
+        },
+        voice: {
+          provider: 'elevenlabs',
+          voiceId: 'rachel'
+        },
+        firstMessage: '',
+        recordingEnabled: true,
+        endCallMessage: ''
+      });
+      alert(`Assistant "${createdAssistant.name}" created successfully!`);
+    } catch (err: any) {
+      setError(`Failed to create assistant: ${err.message || err}`);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const updateAssistant = async (assistantId: string, updates: Partial<VapiAssistant>) => {
+    if (!apiKey || !isValid) {
+      setError('Please set a valid VAPI API key first');
+      return;
+    }
+
+    try {
+      const client = createVapiClient({ apiKey });
+      const updatedAssistant = await client.updateAssistant(assistantId, updates);
+      setAssistants(prev => prev.map(a => a.id === assistantId ? updatedAssistant : a));
+      setEditingAssistant(null);
+      alert('Assistant updated successfully!');
+    } catch (err: any) {
+      setError(`Failed to update assistant: ${err.message || err}`);
     }
   };
 
@@ -119,18 +270,37 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
     }
   };
 
-  const clearApiKey = () => {
+  const clearApiKey = async () => {
     setApiKey('');
     setIsValid(null);
     setAssistants([]);
     setAccountInfo(null);
     localStorage.removeItem('vapi_api_key');
+    
+    // Also remove from backend
+    if (!testMode && user) {
+      try {
+        const session = await fetchAuthSession();
+        const token = session.tokens?.idToken?.toString();
+        
+        await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (err) {
+        console.error('Error removing API key from backend:', err);
+      }
+    }
   };
 
   return (
-    <div className="vapi-settings-container">
-      <div className="vapi-settings-header">
-        <button className="back-btn" onClick={onBack}>← Back</button>
+    <div className="vapi-settings-container theme-bg-primary">
+      <div className="vapi-settings-header theme-bg-card">
+        <ThemeToggle className="vapi-theme-toggle" />
+        <button className="back-btn theme-button-secondary" onClick={onBack}>← Back</button>
         <div className="header-title">
           <h2>🎯 VAPI Integration Settings</h2>
           <p>Connect your VAPI account to manage AI voice assistants</p>
@@ -139,7 +309,7 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
 
       {/* API Key Configuration */}
       <div className="settings-section">
-        <h3>VAPI API Key Configuration</h3>
+        <h3>🔑 VAPI API Key Configuration</h3>
         <div className="api-key-setup">
           <div className="api-key-input-group">
             <input
@@ -160,7 +330,7 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
           
           {isValid !== null && (
             <div className={`validation-status ${isValid ? 'valid' : 'invalid'}`}>
-              {isValid ? '✅ API Key Valid' : '❌ Invalid API Key'}
+              {isValid ? '✅ API Key Valid & Saved' : '❌ Invalid API Key'}
             </div>
           )}
           
@@ -179,6 +349,9 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
             <li>Create a new API key or copy an existing one</li>
             <li>Paste it above and click "Connect"</li>
           </ol>
+          <div className="api-key-note">
+            <strong>Note:</strong> {isAdmin ? 'As an admin, your API key will be used for all assistant management.' : 'Your API key is securely stored and encrypted.'}
+          </div>
         </div>
       </div>
 
@@ -249,13 +422,174 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
               </div>
             ))}
           </div>
+
+          {/* Custom Assistant Creation */}
+          <div className="custom-assistant-section">
+            <div className="section-header">
+              <h4>Create Custom Assistant</h4>
+              <button 
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                className="toggle-form-btn"
+              >
+                {showCreateForm ? 'Cancel' : '+ Create Custom'}
+              </button>
+            </div>
+
+            {showCreateForm && (
+              <div className="create-form">
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Assistant Name *</label>
+                    <input
+                      type="text"
+                      value={newAssistant.name}
+                      onChange={(e) => setNewAssistant(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter assistant name"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Voice Provider</label>
+                    <select
+                      value={newAssistant.voice?.provider}
+                      onChange={(e) => setNewAssistant(prev => ({
+                        ...prev,
+                        voice: { ...prev.voice!, provider: e.target.value }
+                      }))}
+                    >
+                      <option value="elevenlabs">ElevenLabs</option>
+                      <option value="playht">PlayHT</option>
+                      <option value="openai">OpenAI</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Voice ID</label>
+                    <input
+                      type="text"
+                      value={newAssistant.voice?.voiceId}
+                      onChange={(e) => setNewAssistant(prev => ({
+                        ...prev,
+                        voice: { ...prev.voice!, voiceId: e.target.value }
+                      }))}
+                      placeholder="e.g., rachel, sam, bella"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Model Provider</label>
+                    <select
+                      value={newAssistant.model?.provider}
+                      onChange={(e) => setNewAssistant(prev => ({
+                        ...prev,
+                        model: { ...prev.model!, provider: e.target.value }
+                      }))}
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Model</label>
+                    <select
+                      value={newAssistant.model?.model}
+                      onChange={(e) => setNewAssistant(prev => ({
+                        ...prev,
+                        model: { ...prev.model!, model: e.target.value }
+                      }))}
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                      <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Temperature</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={newAssistant.model?.temperature}
+                      onChange={(e) => setNewAssistant(prev => ({
+                        ...prev,
+                        model: { ...prev.model!, temperature: parseFloat(e.target.value) }
+                      }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group full-width">
+                  <label>System Message *</label>
+                  <textarea
+                    value={newAssistant.model?.systemMessage}
+                    onChange={(e) => setNewAssistant(prev => ({
+                      ...prev,
+                      model: { ...prev.model!, systemMessage: e.target.value }
+                    }))}
+                    placeholder="Enter the system prompt for your assistant..."
+                    rows={4}
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label>First Message</label>
+                  <input
+                    type="text"
+                    value={newAssistant.firstMessage}
+                    onChange={(e) => setNewAssistant(prev => ({ ...prev, firstMessage: e.target.value }))}
+                    placeholder="Hello! How can I help you today?"
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label>End Call Message</label>
+                  <input
+                    type="text"
+                    value={newAssistant.endCallMessage}
+                    onChange={(e) => setNewAssistant(prev => ({ ...prev, endCallMessage: e.target.value }))}
+                    placeholder="Thank you for calling. Have a great day!"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={newAssistant.recordingEnabled}
+                      onChange={(e) => setNewAssistant(prev => ({ ...prev, recordingEnabled: e.target.checked }))}
+                    />
+                    Enable Recording
+                  </label>
+                </div>
+
+                <div className="form-actions">
+                  <button 
+                    onClick={createCustomAssistant}
+                    disabled={isCreating}
+                    className="create-btn"
+                  >
+                    {isCreating ? 'Creating...' : 'Create Assistant'}
+                  </button>
+                  <button 
+                    onClick={() => setShowCreateForm(false)}
+                    className="cancel-btn"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* Existing Assistants */}
       {isValid && (
         <div className="settings-section">
-          <h3>Your VAPI Assistants ({assistants.length})</h3>
+          <h3>🤖 Your VAPI Assistants ({assistants.length})</h3>
           
           {loading ? (
             <div className="loading">
@@ -274,6 +608,9 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
                       <span>🤖 {assistant.model?.model || 'Default'}</span>
                       <span>📝 {assistant.recordingEnabled ? 'Recording On' : 'Recording Off'}</span>
                     </div>
+                    {assistant.firstMessage && (
+                      <p className="first-message">"{assistant.firstMessage}"</p>
+                    )}
                   </div>
                   <div className="assistant-actions">
                     <button 
@@ -283,12 +620,20 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
                       View Details
                     </button>
                     {isAdmin && (
-                      <button 
-                        onClick={() => deleteAssistant(assistant.id!)}
-                        className="delete-btn"
-                      >
-                        Delete
-                      </button>
+                      <>
+                        <button 
+                          onClick={() => setEditingAssistant(assistant)}
+                          className="edit-btn"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => deleteAssistant(assistant.id!)}
+                          className="delete-btn"
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -302,6 +647,149 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
               {isAdmin && <p>Use the templates above to create your first Voice Matrix assistants.</p>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Edit Assistant Modal */}
+      {editingAssistant && (
+        <div className="modal-overlay" onClick={() => setEditingAssistant(null)}>
+          <div className="modal-content edit-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Edit Assistant: {editingAssistant.name}</h3>
+              <button onClick={() => setEditingAssistant(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="edit-form">
+                <div className="form-group">
+                  <label>Assistant Name</label>
+                  <input
+                    type="text"
+                    value={editingAssistant.name}
+                    onChange={(e) => setEditingAssistant(prev => prev ? { ...prev, name: e.target.value } : null)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>First Message</label>
+                  <input
+                    type="text"
+                    value={editingAssistant.firstMessage || ''}
+                    onChange={(e) => setEditingAssistant(prev => prev ? { ...prev, firstMessage: e.target.value } : null)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>End Call Message</label>
+                  <input
+                    type="text"
+                    value={editingAssistant.endCallMessage || ''}
+                    onChange={(e) => setEditingAssistant(prev => prev ? { ...prev, endCallMessage: e.target.value } : null)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>System Message</label>
+                  <textarea
+                    value={editingAssistant.model?.systemMessage || ''}
+                    onChange={(e) => setEditingAssistant(prev => prev ? {
+                      ...prev,
+                      model: { ...prev.model!, systemMessage: e.target.value }
+                    } : null)}
+                    rows={6}
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Voice Provider</label>
+                    <select
+                      value={editingAssistant.voice?.provider || 'elevenlabs'}
+                      onChange={(e) => setEditingAssistant(prev => prev ? {
+                        ...prev,
+                        voice: { ...prev.voice!, provider: e.target.value }
+                      } : null)}
+                    >
+                      <option value="elevenlabs">ElevenLabs</option>
+                      <option value="playht">PlayHT</option>
+                      <option value="openai">OpenAI</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Voice ID</label>
+                    <input
+                      type="text"
+                      value={editingAssistant.voice?.voiceId || ''}
+                      onChange={(e) => setEditingAssistant(prev => prev ? {
+                        ...prev,
+                        voice: { ...prev.voice!, voiceId: e.target.value }
+                      } : null)}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Model Provider</label>
+                    <select
+                      value={editingAssistant.model?.provider || 'openai'}
+                      onChange={(e) => setEditingAssistant(prev => prev ? {
+                        ...prev,
+                        model: { ...prev.model!, provider: e.target.value }
+                      } : null)}
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Model</label>
+                    <select
+                      value={editingAssistant.model?.model || 'gpt-3.5-turbo'}
+                      onChange={(e) => setEditingAssistant(prev => prev ? {
+                        ...prev,
+                        model: { ...prev.model!, model: e.target.value }
+                      } : null)}
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                      <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={editingAssistant.recordingEnabled || false}
+                      onChange={(e) => setEditingAssistant(prev => prev ? {
+                        ...prev,
+                        recordingEnabled: e.target.checked
+                      } : null)}
+                    />
+                    Enable Recording
+                  </label>
+                </div>
+
+                <div className="modal-actions">
+                  <button 
+                    onClick={() => updateAssistant(editingAssistant.id!, editingAssistant)}
+                    className="save-btn"
+                  >
+                    Save Changes
+                  </button>
+                  <button 
+                    onClick={() => setEditingAssistant(null)}
+                    className="cancel-btn"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -352,6 +840,19 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
                       <span key={i} className="phrase">{phrase}</span>
                     ))}
                   </div>
+                </div>
+              )}
+              {isAdmin && (
+                <div className="modal-actions">
+                  <button 
+                    onClick={() => {
+                      setSelectedAssistant(null);
+                      setEditingAssistant(selectedAssistant);
+                    }}
+                    className="edit-btn"
+                  >
+                    Edit Assistant
+                  </button>
                 </div>
               )}
             </div>

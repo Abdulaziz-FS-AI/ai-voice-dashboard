@@ -55,3 +55,32 @@ export const isAuthorizedAdmin = (user: any, userName: string | null): boolean =
 export const validateAdminAccessCode = (code: string): boolean => {
   return code === adminConfig.adminAccessCode;
 };
+
+// Additional admin utilities
+export interface AdminUser {
+  email: string;
+  role: 'admin' | 'super-admin';
+  permissions: string[];
+}
+
+/**
+ * Check if user has specific permission for VAPI management
+ */
+export const hasVapiPermission = (user: any, userName: string | null): boolean => {
+  return isAuthorizedAdmin(user, userName);
+};
+
+/**
+ * Get user role for display purposes
+ */
+export const getUserRole = (user: any, userName: string | null): 'user' | 'admin' => {
+  return isAuthorizedAdmin(user, userName) ? 'admin' : 'user';
+};
+
+// Available permissions
+export const PERMISSIONS = {
+  MANAGE_ASSISTANTS: 'manage-assistants',
+  MANAGE_USERS: 'manage-users', 
+  VIEW_ANALYTICS: 'view-analytics',
+  MANAGE_API_KEYS: 'manage-api-keys'
+} as const;

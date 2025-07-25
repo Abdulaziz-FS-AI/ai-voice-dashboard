@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { isAuthorizedAdmin, hasVapiPermission } from '../utils/adminConfig';
 import VapiSettings from './VapiSettings';
+import ThemeToggle from './ThemeToggle';
 import './Dashboard.css';
 
 interface CallLog {
@@ -29,13 +32,17 @@ const Dashboard: React.FC<DashboardProps> = ({
   onStartAssistantSetup,
   hasCompletedSetup = false,
   userPhone = '',
-  isAdmin = false,
+  isAdmin: propIsAdmin = false,
   testMode = false 
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings'>('dashboard');
   const { user, userName, logout } = useAuth();
+  const { } = useTheme();
+
+  // Determine if user is admin
+  const isUserAdmin = propIsAdmin || isAuthorizedAdmin(user, userName);
 
   // Mock data
   const mockCallLogs: CallLog[] = [
@@ -123,12 +130,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   if (currentView === 'vapi-settings') {
-    return <VapiSettings onBack={() => setCurrentView('dashboard')} testMode={testMode} isAdmin={isAdmin} />;
+    return <VapiSettings onBack={() => setCurrentView('dashboard')} testMode={testMode} isAdmin={isUserAdmin} />;
   }
 
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-header">
+    <div className="dashboard-container theme-bg-primary">
+      <div className="dashboard-header theme-bg-card theme-shadow">
         <div className="header-logo">
           <img 
             src="/voice-matrix-logo.png" 
@@ -139,15 +146,16 @@ const Dashboard: React.FC<DashboardProps> = ({
             }}
           />
           <div className="header-title">
-            <h1>Voice Matrix Dashboard</h1>
-            <span className="dashboard-subtitle">Call Analytics & Management</span>
+            <h1 className="theme-text-primary">Voice Matrix Dashboard</h1>
+            <span className="dashboard-subtitle theme-text-secondary">Call Analytics & Management</span>
           </div>
         </div>
         <div className="header-controls">
+          <ThemeToggle className="dashboard-theme-toggle" />
           <select 
             value={selectedPeriod} 
             onChange={(e) => setSelectedPeriod(e.target.value as any)}
-            className="period-selector"
+            className="period-selector theme-input"
           >
             <option value="today">Today</option>
             <option value="week">This Week</option>
@@ -155,24 +163,24 @@ const Dashboard: React.FC<DashboardProps> = ({
           </select>
           
           {!hasCompletedSetup && onStartAssistantSetup && (
-            <button className="get-started-button" onClick={onStartAssistantSetup}>
+            <button className="get-started-button theme-button" onClick={onStartAssistantSetup}>
               🚀 Get Started with Assistant
             </button>
           )}
           
           {hasCompletedSetup && (
             <>
-              <button className="config-button" onClick={() => onNavigate('editor')}>
+              <button className="config-button theme-button-secondary" onClick={() => onNavigate('editor')}>
                 Configure AI Agent
               </button>
-              <button className="settings-button" onClick={() => setCurrentView('vapi-settings')}>
-                VAPI Settings
+              <button className="settings-button theme-button-secondary" onClick={() => setCurrentView('vapi-settings')}>
+                🔑 VAPI Settings {isUserAdmin && '(Admin)'}
               </button>
             </>
           )}
           
-          {isAdmin && (
-            <button className="admin-button" onClick={() => onNavigate('admin')}>
+          {isUserAdmin && (
+            <button className="admin-button theme-button" onClick={() => onNavigate('admin')}>
               👑 Admin Panel
             </button>
           )}
@@ -185,8 +193,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           
           {user && (
             <div className="user-section">
-              <span className="user-name">Welcome, {userName || 'User'}{isAdmin && ' (Admin)'}</span>
-              <button className="logout-button" onClick={logout}>
+              <span className="user-name theme-text-primary">Welcome, {userName || 'User'}{isUserAdmin && ' (Admin)'}</span>
+              <button className="logout-button theme-button-secondary" onClick={logout}>
                 Logout
               </button>
             </div>
@@ -194,32 +202,32 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card">
+      <div className="stats-grid theme-bg-secondary">
+        <div className="stat-card theme-card">
           <div className="stat-value">{stats.totalCalls}</div>
           <div className="stat-label">Total Calls</div>
           <div className="stat-change">+12% from yesterday</div>
         </div>
         
-        <div className="stat-card">
+        <div className="stat-card theme-card">
           <div className="stat-value">{stats.completedCalls}</div>
           <div className="stat-label">Completed</div>
           <div className="stat-change">+8% from yesterday</div>
         </div>
         
-        <div className="stat-card">
+        <div className="stat-card theme-card">
           <div className="stat-value">{stats.averageDuration}</div>
           <div className="stat-label">Avg Duration</div>
           <div className="stat-change">-5% from yesterday</div>
         </div>
         
-        <div className="stat-card">
+        <div className="stat-card theme-card">
           <div className="stat-value">{stats.averageSatisfaction}/5</div>
           <div className="stat-label">Satisfaction</div>
           <div className="stat-change">+0.2 from yesterday</div>
         </div>
         
-        <div className="stat-card">
+        <div className="stat-card theme-card">
           <div className="stat-value">{stats.conversionRate}%</div>
           <div className="stat-label">Conversion</div>
           <div className="stat-change">+15% from yesterday</div>
@@ -227,8 +235,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="dashboard-content">
-        <div className="calls-section">
-          <h2>Recent Calls</h2>
+        <div className="calls-section theme-card">
+          <h2 className="theme-text-primary">Recent Calls</h2>
           <div className="calls-table">
             <div className="table-header">
               <div>Time</div>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import ThemeToggle from './ThemeToggle';
 import './VoiceAgentEditor.css';
 
 interface VapiAssistant {
@@ -48,6 +50,7 @@ interface VoiceAgentEditorProps {
 
 const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate, testMode = false }) => {
   const { user } = useAuth();
+  const { } = useTheme();
   const [assistants, setAssistants] = useState<VapiAssistant[]>([]);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,7 +78,6 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate,
 
   useEffect(() => {
     fetchAssistants();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchAssistants = async () => {
@@ -102,8 +104,24 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate,
     
     setLoading(true);
     try {
+      // First check if user has VAPI credentials
       const session = await fetchAuthSession();
       const token = session.tokens?.idToken?.toString();
+      
+      const credentialsResponse = await fetch(`${process.env.REACT_APP_API_URL}/user/vapi-credentials`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!credentialsResponse.ok) {
+        setMessage({ type: 'error', text: 'Please configure your VAPI API key in Settings first' });
+        setLoading(false);
+        return;
+      }
+
+      // Fetch assistants using backend endpoint
       const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/assistants`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -117,6 +135,8 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate,
         if (data.length > 0) {
           setSelectedAssistant(data[0]);
           loadAssistantConfig(data[0]);
+        } else {
+          setMessage({ type: 'error', text: 'No assistants found. Please create assistants in VAPI Settings first.' });
         }
       } else if (response.status === 400) {
         setMessage({ type: 'error', text: 'Please configure your VAPI credentials first' });
@@ -336,18 +356,18 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate,
 
   if (loading) {
     return (
-      <div className="voice-editor-container">
+      <div className="voice-editor-container theme-bg-primary">
         <div className="loading-spinner">
           <div className="spinner"></div>
-          <p>Loading VAPI assistants...</p>
+          <p className="theme-text-primary">Loading VAPI assistants...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="voice-editor-container">
-      <div className="editor-header">
+    <div className="voice-editor-container theme-bg-primary">
+      <div className="editor-header theme-bg-card">
         <div className="header-logo">
           <img 
             src="/voice-matrix-logo.png" 
@@ -358,16 +378,17 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate,
             }}
           />
           <div className="header-title">
-            <h1>Voice Matrix Agent Configuration</h1>
-            <span className="editor-subtitle">Customize Your VAPI Assistant</span>
+            <h1 className="theme-text-primary">Voice Matrix Agent Configuration</h1>
+            <span className="editor-subtitle theme-text-secondary">Customize Your VAPI Assistant</span>
           </div>
         </div>
         <div className="header-buttons">
-          <button className="nav-button" onClick={() => onNavigate('dashboard')}>
+          <ThemeToggle className="editor-theme-toggle" />
+          <button className="nav-button theme-button-secondary" onClick={() => onNavigate('dashboard')}>
             Dashboard
           </button>
           <button 
-            className="save-button" 
+            className="save-button theme-button" 
             onClick={handleSave}
             disabled={saving || !selectedAssistant}
           >

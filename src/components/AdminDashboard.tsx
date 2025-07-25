@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import ThemeToggle from './ThemeToggle';
 import './AdminDashboard.css';
 
 interface User {
@@ -31,6 +33,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogout, isCodeUnlocked = false }) => {
   const [currentView, setCurrentView] = useState<'overview' | 'users' | 'assistants' | 'analytics'>('overview');
   const { userName, logout } = useAuth();
+  const { } = useTheme();
 
   // Mock admin data
   const mockUsers: User[] = [
@@ -295,8 +298,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
   );
 
   return (
-    <div className="admin-dashboard-container">
-      <div className="admin-header">
+    <div className="admin-dashboard-container theme-bg-primary">
+      <div className="admin-header theme-bg-card">
         <div className="admin-title">
           <h1>👑 Admin Dashboard</h1>
           <span className="admin-subtitle">Voice Matrix Administration</span>
@@ -307,7 +310,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
           )}
         </div>
         <div className="admin-controls">
-          <button className="back-to-dashboard-btn" onClick={() => onNavigate('dashboard')}>
+          <ThemeToggle className="admin-theme-toggle" />
+          <button className="back-to-dashboard-btn theme-button-secondary" onClick={() => onNavigate('dashboard')}>
             ← Back to Dashboard
           </button>
           <div className="admin-user-section">
