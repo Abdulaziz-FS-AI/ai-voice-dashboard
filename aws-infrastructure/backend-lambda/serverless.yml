@@ -15,12 +15,13 @@ provider:
     USERS_TABLE: ${self:provider.stage}-voice-matrix-users
     VAPI_CONFIG_TABLE: ${self:provider.stage}-voice-matrix-vapi-config
     VAPI_SECRET_NAME: voice-matrix/${self:provider.stage}/vapi-api-key
-  vpc:
-    securityGroupIds:
-      - ${cf:voice-matrix-${self:provider.stage}-infrastructure.LambdaSecurityGroupId}
-    subnetIds:
-      - ${cf:voice-matrix-${self:provider.stage}-infrastructure.PrivateSubnet1Id}
-      - ${cf:voice-matrix-${self:provider.stage}-infrastructure.PrivateSubnet2Id}
+    JWT_SECRET: voice-matrix-super-secret-jwt-key-${self:provider.stage}
+# vpc:
+  #   securityGroupIds:
+  #     - ${cf:voice-matrix-${self:provider.stage}-infrastructure.LambdaSecurityGroupId}
+  #   subnetIds:
+  #     - ${cf:voice-matrix-${self:provider.stage}-infrastructure.PrivateSubnet1Id}
+  #     - ${cf:voice-matrix-${self:provider.stage}-infrastructure.PrivateSubnet2Id}
   iam:
     role:
       name: ${self:provider.stage}-voice-matrix-lambda-role
@@ -48,7 +49,6 @@ provider:
 
 plugins:
   - serverless-plugin-typescript
-  - serverless-offline
 
 functions:
   # Authentication
@@ -111,6 +111,37 @@ functions:
     events:
       - http:
           path: /admin/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # Dashboard
+  dashboard:
+    handler: src/handlers/dashboard.handler
+    events:
+      - http:
+          path: /dashboard/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+      - http:
+          path: /dashboard
           method: ANY
           cors:
             origin: '*'

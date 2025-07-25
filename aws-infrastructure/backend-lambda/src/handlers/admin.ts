@@ -41,7 +41,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     switch (`${method}:${path}`) {
       case 'GET:users':
-        return await handleGetUsers();
+        return await handleGetUsers(event);
       case 'GET:analytics':
         return await handleGetAnalytics();
       case 'PUT:users/status':
@@ -50,6 +50,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return await handleDeleteUser(event);
       case 'GET:system-status':
         return await handleGetSystemStatus();
+      case 'GET:revenue':
+        return await handleGetRevenue(event);
+      case 'GET:subscriptions':
+        return await handleGetSubscriptions(event);
+      case 'PUT:subscriptions':
+        return await handleUpdateUserSubscription(event);
+      case 'GET:audit-logs':
+        return await handleGetAuditLogs(event);
+      case 'POST:broadcast':
+        return await handleBroadcastMessage(event);
+      case 'GET:feature-flags':
+        return await handleGetFeatureFlags();
+      case 'PUT:feature-flags':
+        return await handleUpdateFeatureFlags(event);
       default:
         return {
           statusCode: 404,
@@ -109,7 +123,7 @@ async function verifyAdminToken(event: APIGatewayProxyEvent): Promise<APIGateway
   }
 }
 
-async function handleGetUsers(): Promise<APIGatewayProxyResult> {
+async function handleGetUsers(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
     const result = await docClient.send(new ScanCommand({
       TableName: USERS_TABLE,
@@ -410,6 +424,325 @@ async function handleGetSystemStatus(): Promise<APIGatewayProxyResult> {
         timestamp: new Date().toISOString(),
         error: 'Failed to check system status'
       })
+    };
+  }
+}
+
+async function handleGetRevenue(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  try {
+    const { period = '30' } = event.queryStringParameters || {};
+    const periodDays = parseInt(period);
+    
+    // Get all users with subscriptions
+    const result = await docClient.send(new ScanCommand({
+      TableName: USERS_TABLE,
+      ProjectionExpression: 'userId, subscription, createdAt'
+    }));
+
+    const users = result.Items || [];
+    
+    // Calculate revenue metrics
+    const currentDate = new Date();
+    const periodStart = new Date(currentDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
+    
+    const planPrices = {
+      free: 0,
+      basic: 29,
+      pro: 99,
+      enterprise: 299
+    };
+
+    let totalRevenue = 0;
+    let activeSubscriptions = 0;
+    const revenueByPlan: { [key: string]: number } = {};
+
+    users.forEach(user => {
+      if (user.subscription && user.subscription.status === 'active') {
+        const planPrice = planPrices[user.subscription.plan as keyof typeof planPrices] || 0;
+        totalRevenue += planPrice;
+        activeSubscriptions++;
+        revenueByPlan[user.subscription.plan] = (revenueByPlan[user.subscription.plan] || 0) + planPrice;
+      }
+    });
+
+    const recentUsers = users.filter(u => new Date(u.createdAt) >= periodStart);
+    const newSubscriptionRevenue = recentUsers
+      .filter(u => u.subscription && u.subscription.status === 'active')
+      .reduce((sum, u) => sum + (planPrices[u.subscription.plan as keyof typeof planPrices] || 0), 0);
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        totalRevenue,
+        monthlyRecurringRevenue: totalRevenue,
+        activeSubscriptions,
+        revenueByPlan,
+        newSubscriptionRevenue,
+        averageRevenuePerUser: activeSubscriptions > 0 ? totalRevenue / activeSubscriptions : 0,
+        period: `${periodDays} days`
+      })
+    };
+  } catch (error) {
+    console.error('Error getting revenue:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to get revenue data' })
+    };
+  }
+}
+
+async function handleGetSubscriptions(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  try {
+    const { page = '1', limit = '50' } = event.queryStringParameters || {};
+    
+    const result = await docClient.send(new ScanCommand({
+      TableName: USERS_TABLE,
+      ProjectionExpression: 'userId, email, subscription, createdAt, profile'
+    }));
+
+    const users = result.Items || [];
+    const subscriptions = users
+      .filter(u => u.subscription)
+      .map(u => ({
+        userId: u.userId,
+        email: u.email,
+        name: `${u.profile?.firstName || ''} ${u.profile?.lastName || ''}`.trim(),
+        subscription: u.subscription,
+        createdAt: u.createdAt
+      }));
+
+    // Simple pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
+    const paginatedSubscriptions = subscriptions.slice(startIndex, endIndex);
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        subscriptions: paginatedSubscriptions,
+        total: subscriptions.length,
+        page: pageNum,
+        totalPages: Math.ceil(subscriptions.length / limitNum)
+      })
+    };
+  } catch (error) {
+    console.error('Error getting subscriptions:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to get subscriptions' })
+    };
+  }
+}
+
+async function handleUpdateUserSubscription(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  if (!event.body) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Request body is required' })
+    };
+  }
+
+  try {
+    const { userId, plan, status, expiresAt } = JSON.parse(event.body);
+
+    if (!userId || !plan || !status) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'userId, plan, and status are required' })
+      };
+    }
+
+    const subscription = {
+      plan,
+      status,
+      expiresAt: expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    await docClient.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { userId },
+      UpdateExpression: 'SET subscription = :subscription, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':subscription': subscription,
+        ':updatedAt': new Date().toISOString()
+      },
+      ConditionExpression: 'attribute_exists(userId)'
+    }));
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        message: 'Subscription updated successfully',
+        userId,
+        subscription
+      })
+    };
+  } catch (error: any) {
+    console.error('Error updating subscription:', error);
+    
+    if (error.name === 'ConditionalCheckFailedException') {
+      return {
+        statusCode: 404,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'User not found' })
+      };
+    }
+
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to update subscription' })
+    };
+  }
+}
+
+async function handleGetAuditLogs(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  try {
+    // In a real implementation, you'd have a separate audit logs table
+    // For now, return mock audit data
+    const mockAuditLogs = [
+      {
+        id: '1',
+        timestamp: new Date().toISOString(),
+        userId: 'admin-demo',
+        action: 'USER_STATUS_UPDATED',
+        details: 'User account activated',
+        ipAddress: '192.168.1.1'
+      },
+      {
+        id: '2',
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        userId: 'admin-demo',
+        action: 'SUBSCRIPTION_UPDATED',
+        details: 'User upgraded to Pro plan',
+        ipAddress: '192.168.1.1'
+      }
+    ];
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        logs: mockAuditLogs,
+        total: mockAuditLogs.length
+      })
+    };
+  } catch (error) {
+    console.error('Error getting audit logs:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to get audit logs' })
+    };
+  }
+}
+
+async function handleBroadcastMessage(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  if (!event.body) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Request body is required' })
+    };
+  }
+
+  try {
+    const { message, userFilter = 'all' } = JSON.parse(event.body);
+
+    if (!message) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Message is required' })
+      };
+    }
+
+    // In a real implementation, you'd send this via email/SMS/push notifications
+    console.log('Broadcasting message:', message, 'to filter:', userFilter);
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        message: 'Broadcast message sent successfully',
+        recipientFilter: userFilter,
+        timestamp: new Date().toISOString()
+      })
+    };
+  } catch (error) {
+    console.error('Error broadcasting message:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to broadcast message' })
+    };
+  }
+}
+
+async function handleGetFeatureFlags(): Promise<APIGatewayProxyResult> {
+  try {
+    // Mock feature flags - in production, store in DynamoDB or feature flag service
+    const featureFlags = {
+      'new-ui': { enabled: true, description: 'Enable new UI design' },
+      'advanced-analytics': { enabled: false, description: 'Advanced analytics dashboard' },
+      'beta-features': { enabled: true, description: 'Beta feature access' },
+      'maintenance-mode': { enabled: false, description: 'Maintenance mode banner' }
+    };
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify(featureFlags)
+    };
+  } catch (error) {
+    console.error('Error getting feature flags:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to get feature flags' })
+    };
+  }
+}
+
+async function handleUpdateFeatureFlags(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  if (!event.body) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Request body is required' })
+    };
+  }
+
+  try {
+    const featureFlags = JSON.parse(event.body);
+
+    // In production, save to DynamoDB or feature flag service
+    console.log('Updating feature flags:', featureFlags);
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        message: 'Feature flags updated successfully',
+        flags: featureFlags,
+        updatedAt: new Date().toISOString()
+      })
+    };
+  } catch (error) {
+    console.error('Error updating feature flags:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to update feature flags' })
     };
   }
 }

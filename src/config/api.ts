@@ -1,28 +1,48 @@
 // API Configuration for Voice Matrix
 export const API_CONFIG = {
-  BASE_URL: 'https://w60nq0gwb5.execute-api.eu-north-1.amazonaws.com/prod',
+  BASE_URL: 'https://jtpyvtfavj.execute-api.us-east-1.amazonaws.com/production',
   ENDPOINTS: {
+    // Authentication
+    AUTH_LOGIN: '/auth/login',
+    AUTH_REGISTER: '/auth/register',
+    AUTH_VERIFY_TOKEN: '/auth/verify-token',
+    AUTH_ADMIN_LOGIN: '/auth/admin-login',
+
     // User Management
     USER_PROFILE: '/user/profile',
     VAPI_CREDENTIALS: '/user/vapi-credentials',
     SYNC_STATUS: '/user/sync-status',
     SYNC_USER_DATA: '/user/sync',
+    USER_SUBSCRIPTION: '/user/subscription',
     
     // VAPI Integration
     VAPI_ASSISTANTS: '/vapi/assistants',
     VAPI_CALLS: '/vapi/calls',
     VAPI_PHONE_NUMBERS: '/vapi/phone-numbers',
     VAPI_TEMPLATES: '/vapi/templates',
+    VAPI_ACCOUNT: '/vapi/account',
     VAPI_LINK_PHONE: (assistantId: string) => `/vapi/assistants/${assistantId}/link-phone`,
     VAPI_UPDATE_ASSISTANT: (assistantId: string) => `/vapi/assistants/${assistantId}`,
     VAPI_DELETE_ASSISTANT: (assistantId: string) => `/vapi/assistants/${assistantId}`,
+    VAPI_TEST_ASSISTANT: '/vapi/assistants/test',
     
     // Dashboard & Analytics
     DASHBOARD: '/dashboard',
-    CALL_LOGS: '/calls',
+    DASHBOARD_STATS: '/dashboard/stats',
+    DASHBOARD_RECENT_ACTIVITY: '/dashboard/recent-activity',
+    DASHBOARD_QUICK_ACTIONS: '/dashboard/quick-actions',
+    
+    // Admin
+    ADMIN_USERS: '/admin/users',
+    ADMIN_ANALYTICS: '/admin/analytics',
+    ADMIN_REVENUE: '/admin/revenue',
+    ADMIN_SUBSCRIPTIONS: '/admin/subscriptions',
+    ADMIN_SYSTEM_STATUS: '/admin/system-status',
+    ADMIN_AUDIT_LOGS: '/admin/audit-logs',
+    ADMIN_FEATURE_FLAGS: '/admin/feature-flags',
     
     // Webhooks
-    VAPI_WEBHOOK: '/webhook/vapi'
+    VAPI_WEBHOOK: '/vapi/webhook'
   }
 };
 

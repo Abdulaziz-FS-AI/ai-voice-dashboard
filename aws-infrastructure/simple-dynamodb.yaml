@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Voice Matrix AI Dashboard - DynamoDB Tables Only'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Environment name
+
+Resources:
+  # DynamoDB Table for Users
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${Environment}-voice-matrix-users"
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: VoiceMatrix
+
+  # DynamoDB Table for VAPI Configuration
+  VapiConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${Environment}-voice-matrix-vapi-config"
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: VoiceMatrix
+
+  # DynamoDB Table for Call Logs (optional for future use)
+  CallLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${Environment}-voice-matrix-call-logs"
+      AttributeDefinitions:
+        - AttributeName: callId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: callId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserTimestampIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: VoiceMatrix
+
+Outputs:
+  UsersTableName:
+    Description: Users DynamoDB Table Name
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-users-table"
+
+  UsersTableArn:
+    Description: Users DynamoDB Table ARN
+    Value: !GetAtt UsersTable.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-users-table-arn"
+
+  VapiConfigTableName:
+    Description: VAPI Config DynamoDB Table Name
+    Value: !Ref VapiConfigTable
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-vapi-config-table"
+
+  VapiConfigTableArn:
+    Description: VAPI Config DynamoDB Table ARN
+    Value: !GetAtt VapiConfigTable.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-vapi-config-table-arn"
+
+  CallLogsTableName:
+    Description: Call Logs DynamoDB Table Name
+    Value: !Ref CallLogsTable
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-call-logs-table"
+
+  CallLogsTableArn:
+    Description: Call Logs DynamoDB Table ARN
+    Value: !GetAtt CallLogsTable.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-call-logs-table-arn"

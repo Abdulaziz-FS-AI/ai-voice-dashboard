@@ -60,6 +60,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return await handleDeleteVapiCredentials(userId);
       case 'PUT:password':
         return await handleChangePassword(userId, event);
+      case 'GET:sync-status':
+        return await handleGetSyncStatus(userId);
+      case 'POST:sync':
+        return await handleSyncUserData(userId, event);
+      case 'GET:subscription':
+        return await handleGetSubscription(userId);
+      case 'PUT:subscription':
+        return await handleUpdateSubscription(userId, event);
+      case 'DELETE:account':
+        return await handleDeleteAccount(userId, event);
       default:
         return {
           statusCode: 404,
@@ -361,6 +371,213 @@ async function handleChangePassword(userId: string, event: APIGatewayProxyEvent)
       statusCode: 500,
       headers: corsHeaders,
       body: JSON.stringify({ error: 'Failed to change password' })
+    };
+  }
+}
+
+async function handleGetSyncStatus(userId: string): Promise<APIGatewayProxyResult> {
+  try {
+    // Check if user has VAPI credentials
+    const vapiResult = await docClient.send(new GetCommand({
+      TableName: VAPI_CONFIG_TABLE,
+      Key: { userId }
+    }));
+
+    // Get user profile
+    const userResult = await docClient.send(new GetCommand({
+      TableName: USERS_TABLE,
+      Key: { userId }
+    }));
+
+    const syncStatus = {
+      userId,
+      hasVapiCredentials: !!vapiResult.Item,
+      profileComplete: !!(userResult.Item?.profile?.firstName && userResult.Item?.profile?.lastName),
+      lastSyncAt: userResult.Item?.updatedAt || userResult.Item?.createdAt,
+      syncHealthy: true,
+      needsSetup: !vapiResult.Item || !userResult.Item?.profile?.firstName
+    };
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify(syncStatus)
+    };
+  } catch (error) {
+    console.error('Error getting sync status:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to get sync status' })
+    };
+  }
+}
+
+async function handleSyncUserData(userId: string, event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  try {
+    // Update last sync timestamp
+    await docClient.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { userId },
+      UpdateExpression: 'SET updatedAt = :updatedAt, lastSyncAt = :lastSyncAt',
+      ExpressionAttributeValues: {
+        ':updatedAt': new Date().toISOString(),
+        ':lastSyncAt': new Date().toISOString()
+      }
+    }));
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({ 
+        message: 'User data synced successfully',
+        syncedAt: new Date().toISOString()
+      })
+    };
+  } catch (error) {
+    console.error('Error syncing user data:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to sync user data' })
+    };
+  }
+}
+
+async function handleGetSubscription(userId: string): Promise<APIGatewayProxyResult> {
+  try {
+    const result = await docClient.send(new GetCommand({
+      TableName: USERS_TABLE,
+      Key: { userId }
+    }));
+
+    if (!result.Item) {
+      return {
+        statusCode: 404,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'User not found' })
+      };
+    }
+
+    const subscription = result.Item.subscription || {
+      plan: 'free',
+      status: 'active',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify(subscription)
+    };
+  } catch (error) {
+    console.error('Error getting subscription:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to get subscription' })
+    };
+  }
+}
+
+async function handleUpdateSubscription(userId: string, event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  if (!event.body) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Request body is required' })
+    };
+  }
+
+  try {
+    const { plan, status, expiresAt } = JSON.parse(event.body);
+
+    if (!plan || !status) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Plan and status are required' })
+      };
+    }
+
+    const subscription = {
+      plan,
+      status,
+      expiresAt: expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year default
+    };
+
+    await docClient.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { userId },
+      UpdateExpression: 'SET subscription = :subscription, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':subscription': subscription,
+        ':updatedAt': new Date().toISOString()
+      }
+    }));
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify(subscription)
+    };
+  } catch (error) {
+    console.error('Error updating subscription:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to update subscription' })
+    };
+  }
+}
+
+async function handleDeleteAccount(userId: string, event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  if (!event.body) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Request body is required' })
+    };
+  }
+
+  try {
+    const { confirmation } = JSON.parse(event.body);
+
+    if (confirmation !== 'DELETE_MY_ACCOUNT') {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Invalid confirmation' })
+      };
+    }
+
+    // Delete user
+    await docClient.send(new DeleteCommand({
+      TableName: USERS_TABLE,
+      Key: { userId }
+    }));
+
+    // Delete VAPI config if exists
+    try {
+      await docClient.send(new DeleteCommand({
+        TableName: VAPI_CONFIG_TABLE,
+        Key: { userId }
+      }));
+    } catch (error) {
+      console.log('VAPI config not found for user, continuing...');
+    }
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({ message: 'Account deleted successfully' })
+    };
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Failed to delete account' })
     };
   }
 }

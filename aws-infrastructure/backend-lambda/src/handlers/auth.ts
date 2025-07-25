@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,7 +17,14 @@ interface User {
   passwordHash: string;
   role: 'user' | 'admin';
   createdAt: string;
+  updatedAt?: string;
   isActive: boolean;
+  tenantId?: string; // For SaaS multi-tenancy
+  subscription?: {
+    plan: 'free' | 'basic' | 'pro' | 'enterprise';
+    status: 'active' | 'inactive' | 'cancelled';
+    expiresAt?: string;
+  };
   profile?: {
     firstName?: string;
     lastName?: string;
@@ -189,15 +196,23 @@ async function handleRegister(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user with SaaS features
     const userId = uuidv4();
+    const tenantId = uuidv4(); // Each user gets their own tenant in SaaS model
     const user: User = {
       userId,
       email,
       passwordHash,
       role: 'user',
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       isActive: true,
+      tenantId,
+      subscription: {
+        plan: 'free',
+        status: 'active',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days trial
+      },
       profile: {
         firstName,
         lastName,
@@ -343,13 +358,17 @@ async function handleAdminLogin(event: APIGatewayProxyEvent): Promise<APIGateway
 
 async function getUserByEmail(email: string): Promise<User | null> {
   try {
-    // Note: This is a simple implementation. In production, you'd use a GSI on email
-    const result = await docClient.send(new GetCommand({
+    // Use scan with filter for email lookup (in production, use GSI)
+    const result = await docClient.send(new ScanCommand({
       TableName: USERS_TABLE,
-      Key: { email }
+      FilterExpression: 'email = :email',
+      ExpressionAttributeValues: {
+        ':email': email
+      },
+      Limit: 1
     }));
 
-    return result.Item as User || null;
+    return result.Items && result.Items.length > 0 ? result.Items[0] as User : null;
   } catch (error) {
     console.error('Error getting user by email:', error);
     return null;
