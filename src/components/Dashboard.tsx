@@ -4,6 +4,7 @@ import { isAuthorizedAdmin, hasVapiPermission } from '../utils/adminConfig';
 import { apiCall, API_CONFIG } from '../config/api';
 import VapiSettings from './VapiSettings';
 import PhoneSetupModal from './PhoneSetupModal';
+import AssistantManager from './AssistantManager';
 import './Dashboard.css';
 
 interface CallLog {
@@ -37,7 +38,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings' | 'assistant-manager'>('dashboard');
   const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>(userPhone);
   const { user, userName, logout } = useAuth();
@@ -104,6 +105,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     return <VapiSettings onBack={() => setCurrentView('dashboard')} testMode={testMode} isAdmin={isUserAdmin} />;
   }
 
+  if (currentView === 'assistant-manager') {
+    return <AssistantManager onBack={() => setCurrentView('dashboard')} />;
+  }
+
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
@@ -140,8 +145,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           
           {hasCompletedSetup && (
             <>
-              <button className="config-button" onClick={() => onNavigate('editor')}>
-                Configure AI Agent
+              <button className="config-button" onClick={() => setCurrentView('assistant-manager')}>
+                🤖 Manage Assistants
               </button>
               
               {!customerPhoneNumber ? (

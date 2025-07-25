@@ -36,7 +36,28 @@ export const apiCall = async (
   endpoint: string, 
   options: RequestInit = {}
 ): Promise<Response> => {
-  const token = localStorage.getItem('authToken') || 'demo-token';
+  // In demo mode, use a demo token. In production, get from proper auth
+  let token = localStorage.getItem('authToken');
+  
+  // For demo purposes, create a mock JWT-like token
+  if (!token) {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    if (userData.userId) {
+      // Create a mock JWT for demo mode
+      const mockPayload = {
+        sub: userData.userId,
+        email: userData.email || 'demo@voicematrix.ai',
+        'cognito:username': userData.userName || 'demo-user',
+        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+      };
+      
+      // In demo mode, we'll use this mock token
+      token = `demo.${btoa(JSON.stringify(mockPayload))}.signature`;
+      localStorage.setItem('authToken', token);
+    } else {
+      token = 'demo-token';
+    }
+  }
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
