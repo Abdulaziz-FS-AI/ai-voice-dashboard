@@ -70,74 +70,19 @@ const Dashboard: React.FC<DashboardProps> = ({
     console.log('✅ Phone number created:', phoneNumber, phoneId);
   };
 
-  // Mock data
-  const mockCallLogs: CallLog[] = [
-    {
-      id: '1',
-      date: '2024-01-15',
-      time: '09:15',
-      duration: '3:45',
-      callerName: 'John Smith',
-      callerPhone: '+1-555-0123',
-      outcome: 'completed',
-      satisfaction: 4.5,
-      responses: {
-        'What service are you interested in?': 'Web development',
-        'What is your budget range?': '$5,000 - $10,000',
-        'When do you need this completed?': 'Within 2 months'
-      }
-    },
-    {
-      id: '2',
-      date: '2024-01-15',
-      time: '10:30',
-      duration: '2:12',
-      callerName: 'Sarah Johnson',
-      callerPhone: '+1-555-0456',
-      outcome: 'completed',
-      satisfaction: 5.0,
-      responses: {
-        'What service are you interested in?': 'Mobile app development',
-        'What is your budget range?': '$10,000+',
-        'What platform do you need?': 'iOS and Android'
-      }
-    },
-    {
-      id: '3',
-      date: '2024-01-15',
-      time: '14:20',
-      duration: '1:05',
-      callerName: 'Mike Wilson',
-      callerPhone: '+1-555-0789',
-      outcome: 'abandoned',
-      satisfaction: 2.0,
-      responses: {
-        'What service are you interested in?': 'SEO services'
-      }
-    },
-    {
-      id: '4',
-      date: '2024-01-15',
-      time: '16:45',
-      duration: '4:20',
-      callerName: 'Emily Davis',
-      callerPhone: '+1-555-0321',
-      outcome: 'transferred',
-      satisfaction: 4.0,
-      responses: {
-        'What service are you interested in?': 'E-commerce platform',
-        'What is your budget range?': '$15,000+',
-        'Do you have existing systems?': 'Yes, legacy system'
-      }
-    }
-  ];
+  // Real data will come from API
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
 
   const stats = {
-    totalCalls: mockCallLogs.length,
-    completedCalls: mockCallLogs.filter(call => call.outcome === 'completed').length,
-    averageDuration: '2:48',
-    averageSatisfaction: 3.9,
-    conversionRate: 75
+    totalCalls: callLogs.length,
+    completedCalls: callLogs.filter(call => call.outcome === 'completed').length,
+    averageDuration: callLogs.length > 0 ? 'N/A' : '0:00',
+    averageSatisfaction: callLogs.length > 0 ? 
+      (callLogs.reduce((acc, call) => acc + call.satisfaction, 0) / callLogs.length).toFixed(1) : 
+      '0.0',
+    conversionRate: callLogs.length > 0 ? 
+      Math.round((callLogs.filter(call => call.outcome === 'completed').length / callLogs.length) * 100) : 
+      0
   };
 
   const getOutcomeColor = (outcome: string) => {
@@ -293,8 +238,9 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div>Actions</div>
             </div>
             
-            {mockCallLogs.map(call => (
-              <div key={call.id} className="table-row">
+            {callLogs.length > 0 ? (
+              callLogs.map(call => (
+                <div key={call.id} className="table-row">
                 <div className="time-cell">
                   <div className="call-time">{call.time}</div>
                   <div className="call-date">{call.date}</div>
@@ -329,7 +275,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </button>
                 </div>
               </div>
-            ))}
+            ))
+            ) : (
+              <div className="empty-state">
+                <div className="empty-icon">📞</div>
+                <h3>No calls yet</h3>
+                <p>Once you start receiving calls, they'll appear here</p>
+              </div>
+            )}
           </div>
         </div>
 

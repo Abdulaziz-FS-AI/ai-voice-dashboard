@@ -22,113 +22,8 @@ interface AssistantSelectionProps {
 const AssistantSelection: React.FC<AssistantSelectionProps> = ({ onNext, onBack, userPhone, testMode = false }) => {
   const [selectedAssistant, setSelectedAssistant] = useState<AssistantType | null>(null);
 
-  const assistants: AssistantType[] = [
-    {
-      id: 'sales-pro',
-      name: 'Sales Professional',
-      description: 'Expert at qualifying leads and closing deals',
-      icon: '💼',
-      personality: 'Professional, persuasive, and results-driven',
-      useCase: 'Lead qualification, product demos, sales follow-ups',
-      features: [
-        'Lead qualification automation',
-        'Product knowledge base',
-        'Objection handling',
-        'Meeting scheduling',
-        'CRM integration'
-      ],
-      sampleQuestions: [
-        'What\'s your budget range for this project?',
-        'When are you looking to make a decision?',
-        'Who else is involved in the decision-making process?',
-        'What challenges are you currently facing?'
-      ]
-    },
-    {
-      id: 'customer-support',
-      name: 'Customer Support',
-      description: 'Friendly and helpful customer service specialist',
-      icon: '🎧',
-      personality: 'Empathetic, patient, and solution-focused',
-      useCase: 'Customer inquiries, troubleshooting, support tickets',
-      features: [
-        'Multi-language support',
-        'Knowledge base integration',
-        'Ticket creation',
-        'Escalation handling',
-        'Follow-up scheduling'
-      ],
-      sampleQuestions: [
-        'How can I help you today?',
-        'Can you describe the issue you\'re experiencing?',
-        'Have you tried any troubleshooting steps?',
-        'What\'s your account information?'
-      ]
-    },
-    {
-      id: 'appointment-scheduler',
-      name: 'Appointment Scheduler',
-      description: 'Efficient booking and calendar management',
-      icon: '📅',
-      personality: 'Organized, efficient, and detail-oriented',
-      useCase: 'Appointment booking, rescheduling, reminders',
-      features: [
-        'Calendar integration',
-        'Automated reminders',
-        'Booking confirmations',
-        'Availability checking',
-        'Rescheduling handling'
-      ],
-      sampleQuestions: [
-        'What type of appointment would you like to schedule?',
-        'What\'s your preferred date and time?',
-        'Should I send you a confirmation email?',
-        'Would you like to set up a reminder?'
-      ]
-    },
-    {
-      id: 'market-researcher',
-      name: 'Market Researcher',
-      description: 'Professional survey and research conductor',
-      icon: '📊',
-      personality: 'Analytical, thorough, and neutral',
-      useCase: 'Surveys, market research, data collection',
-      features: [
-        'Survey automation',
-        'Data collection',
-        'Response analytics',
-        'Follow-up questions',
-        'Report generation'
-      ],
-      sampleQuestions: [
-        'On a scale of 1-10, how satisfied are you?',
-        'What factors influenced your decision?',
-        'How did you hear about our product?',
-        'What improvements would you suggest?'
-      ]
-    },
-    {
-      id: 'receptionist',
-      name: 'Virtual Receptionist',
-      description: 'Professional front desk and call routing',
-      icon: '📞',
-      personality: 'Professional, welcoming, and organized',
-      useCase: 'Call routing, information providing, message taking',
-      features: [
-        'Call routing',
-        'Message taking',
-        'Directory assistance',
-        'Business hours info',
-        'Transfer handling'
-      ],
-      sampleQuestions: [
-        'How may I direct your call?',
-        'Who would you like to speak with?',
-        'Can I take a message for them?',
-        'What is this regarding?'
-      ]
-    }
-  ];
+  // Users will create their own assistants in VAPI
+  const assistants: AssistantType[] = [];
 
   const handleSelectAssistant = (assistant: AssistantType) => {
     setSelectedAssistant(assistant);
@@ -156,7 +51,8 @@ const AssistantSelection: React.FC<AssistantSelectionProps> = ({ onNext, onBack,
       </div>
 
       <div className="assistants-grid">
-        {assistants.map((assistant) => (
+        {assistants.length > 0 ? (
+          assistants.map((assistant) => (
           <div
             key={assistant.id}
             className={`assistant-card ${selectedAssistant?.id === assistant.id ? 'selected' : ''}`}
@@ -208,7 +104,23 @@ const AssistantSelection: React.FC<AssistantSelectionProps> = ({ onNext, onBack,
               </div>
             </div>
           </div>
-        ))}
+        ))
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">🤖</div>
+            <h3>No AI Assistants Available</h3>
+            <p>Please configure your assistants in VAPI Settings first</p>
+            <button 
+              className="setup-button"
+              onClick={() => {
+                // Navigate to VAPI settings
+                window.history.back();
+              }}
+            >
+              Go to VAPI Settings
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="selection-footer">

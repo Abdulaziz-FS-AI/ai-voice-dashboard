@@ -32,89 +32,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
   const [currentView, setCurrentView] = useState<'overview' | 'users' | 'assistants' | 'analytics'>('overview');
   const { userName, logout } = useAuth();
 
-  // Mock admin data
-  const mockUsers: User[] = [
-    {
-      id: '1',
-      username: 'john_doe',
-      email: 'john@example.com',
-      phone: '+1-555-0123',
-      selectedAssistant: 'Sales Professional',
-      callsCount: 45,
-      lastActive: '2024-01-15',
-      status: 'active'
-    },
-    {
-      id: '2',
-      username: 'sarah_smith',
-      email: 'sarah@example.com',
-      phone: '+1-555-0456',
-      selectedAssistant: 'Customer Support',
-      callsCount: 32,
-      lastActive: '2024-01-14',
-      status: 'active'
-    },
-    {
-      id: '3',
-      username: 'mike_wilson',
-      email: 'mike@example.com',
-      phone: '+1-555-0789',
-      selectedAssistant: 'Appointment Scheduler',
-      callsCount: 18,
-      lastActive: '2024-01-10',
-      status: 'inactive'
-    }
-  ];
-
-  const mockAssistants: Assistant[] = [
-    {
-      id: 'sales-pro',
-      name: 'Sales Professional',
-      description: 'Expert at qualifying leads and closing deals',
-      icon: '💼',
-      usageCount: 45,
-      isActive: true
-    },
-    {
-      id: 'customer-support',
-      name: 'Customer Support',
-      description: 'Friendly and helpful support specialist',
-      icon: '🎧',
-      usageCount: 32,
-      isActive: true
-    },
-    {
-      id: 'appointment-scheduler',
-      name: 'Appointment Scheduler',
-      description: 'Efficient scheduling and calendar management',
-      icon: '📅',
-      usageCount: 18,
-      isActive: true
-    },
-    {
-      id: 'market-researcher',
-      name: 'Market Researcher',
-      description: 'Gathers insights and conducts surveys',
-      icon: '📊',
-      usageCount: 12,
-      isActive: false
-    },
-    {
-      id: 'virtual-receptionist',
-      name: 'Virtual Receptionist',
-      description: 'Professional call handling and routing',
-      icon: '📞',
-      usageCount: 8,
-      isActive: true
-    }
-  ];
+  // Real data will come from API
+  const [users, setUsers] = useState<User[]>([]);
+  const [assistants, setAssistants] = useState<Assistant[]>([]);
 
   const adminStats = {
-    totalUsers: mockUsers.length,
-    activeUsers: mockUsers.filter(u => u.status === 'active').length,
-    totalCalls: mockUsers.reduce((sum, user) => sum + user.callsCount, 0),
-    totalAssistants: mockAssistants.length,
-    activeAssistants: mockAssistants.filter(a => a.isActive).length
+    totalUsers: users.length,
+    activeUsers: users.filter(u => u.status === 'active').length,
+    totalCalls: users.reduce((sum, user) => sum + user.callsCount, 0),
+    totalAssistants: assistants.length,
+    activeAssistants: assistants.filter(a => a.isActive).length
   };
 
   const renderOverview = () => (
@@ -189,7 +116,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
           <div>Actions</div>
         </div>
         
-        {mockUsers.map(user => (
+        {users.length > 0 ? (
+          users.map(user => (
           <div key={user.id} className="table-row">
             <div className="user-cell">
               <div className="user-name">{user.username}</div>
@@ -209,7 +137,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
               <button className="action-btn delete">Delete</button>
             </div>
           </div>
-        ))}
+        ))
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">👥</div>
+            <h3>No users yet</h3>
+            <p>Users will appear here once they sign up</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -222,7 +157,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
       </div>
       
       <div className="assistants-grid">
-        {mockAssistants.map(assistant => (
+        {assistants.length > 0 ? (
+          assistants.map(assistant => (
           <div key={assistant.id} className="assistant-admin-card">
             <div className="assistant-header">
               <span className="assistant-icon">{assistant.icon}</span>
@@ -251,7 +187,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
               <button className="action-btn settings">Settings</button>
             </div>
           </div>
-        ))}
+        ))
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">🤖</div>
+            <h3>No assistants created</h3>
+            <p>Create your first assistant to get started</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -264,21 +207,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
         <div className="chart-card">
           <h4>Most Popular Assistants</h4>
           <div className="chart-bars">
-            {mockAssistants
-              .sort((a, b) => b.usageCount - a.usageCount)
-              .map(assistant => (
-                <div key={assistant.id} className="chart-bar-item">
-                  <span className="bar-label">{assistant.name}</span>
-                  <div className="bar-container">
-                    <div 
-                      className="bar-fill"
-                      style={{ width: `${(assistant.usageCount / Math.max(...mockAssistants.map(a => a.usageCount))) * 100}%` }}
-                    ></div>
+            {assistants.length > 0 ? (
+              assistants
+                .sort((a, b) => b.usageCount - a.usageCount)
+                .map(assistant => (
+                  <div key={assistant.id} className="chart-bar-item">
+                    <span className="bar-label">{assistant.name}</span>
+                    <div className="bar-container">
+                      <div 
+                        className="bar-fill"
+                        style={{ width: `${(assistant.usageCount / Math.max(...assistants.map(a => a.usageCount), 1)) * 100}%` }}
+                      ></div>
                   </div>
                   <span className="bar-value">{assistant.usageCount}</span>
                 </div>
               ))
-            }
+            ) : (
+              <div className="empty-chart">
+                <p>No assistant data available</p>
+              </div>
+            )}
           </div>
         </div>
         
