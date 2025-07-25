@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
+import { apiCall, API_CONFIG } from '../config/api';
+import './PhoneSetupModal.css';
 
 interface PhoneSetupModalProps {
   isOpen: boolean;
@@ -53,12 +55,8 @@ const PhoneSetupModal: React.FC<PhoneSetupModalProps> = ({
   const createVapiPhoneNumber = async (phoneData: CreatePhoneRequest) => {
     try {
       // Call your backend API which will call VAPI with your master account
-      const response = await fetch('/api/vapi/phone-numbers', {
+      const response = await apiCall(API_CONFIG.ENDPOINTS.VAPI_PHONE_NUMBERS, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
         body: JSON.stringify({
           ...phoneData,
           customerId: customerId,
@@ -237,118 +235,6 @@ const PhoneSetupModal: React.FC<PhoneSetupModalProps> = ({
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .modal-content {
-          width: 90%;
-          max-width: 500px;
-          border-radius: 12px;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-          max-height: 90vh;
-          overflow-y: auto;
-        }
-
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 24px 24px 0 24px;
-          border-bottom: 1px solid #e5e7eb;
-          margin-bottom: 24px;
-        }
-
-        .modal-header h2 {
-          margin: 0;
-          font-size: 1.5rem;
-          font-weight: 600;
-        }
-
-        .modal-close {
-          background: none;
-          border: none;
-          font-size: 1.5rem;
-          cursor: pointer;
-          padding: 4px;
-          border-radius: 4px;
-        }
-
-        .modal-close:hover {
-          background-color: #f3f4f6;
-        }
-
-        .modal-body {
-          padding: 0 24px 24px 24px;
-        }
-
-        .modal-footer {
-          padding: 24px;
-          border-top: 1px solid #e5e7eb;
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .form-field label {
-          font-weight: 500;
-        }
-
-        .btn-secondary {
-          padding: 10px 20px;
-          border: 1px solid #d1d5db;
-          background: white;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-
-        .btn-secondary:hover {
-          background-color: #f9fafb;
-        }
-
-        .spinner {
-          display: inline-block;
-          width: 16px;
-          height: 16px;
-          border: 2px solid #f3f3f3;
-          border-top: 2px solid #3498db;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .mb-6 { margin-bottom: 1.5rem; }
-        .mr-2 { margin-right: 0.5rem; }
-        .mr-3 { margin-right: 0.75rem; }
-        .w-full { width: 100%; }
-        .p-3 { padding: 0.75rem; }
-        .block { display: block; }
-        .flex { display: flex; }
-        .items-center { align-items: center; }
-        .text-center { text-align: center; }
-        .text-lg { font-size: 1.125rem; }
-        .text-6xl { font-size: 4rem; }
-        .text-sm { font-size: 0.875rem; }
-        .text-red-500 { color: #ef4444; }
-        .border-red-500 { border-color: #ef4444; }
-        .border-gray-300 { border-color: #d1d5db; }
-      `}</style>
     </div>
   );
 };

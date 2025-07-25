@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { isAuthorizedAdmin, hasVapiPermission } from '../utils/adminConfig';
+import { apiCall, API_CONFIG } from '../config/api';
 import VapiSettings from './VapiSettings';
 import ThemeToggle from './ThemeToggle';
 import PhoneSetupModal from './PhoneSetupModal';
@@ -49,20 +50,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Load user's phone number on mount
   useEffect(() => {
-    if (user?.sub) {
+    if (user?.userId) {
       loadUserPhoneNumber();
     }
   }, [user]);
 
   const loadUserPhoneNumber = async () => {
     try {
-      const token = localStorage.getItem('authToken') || 'demo-token';
-      const response = await fetch('/api/vapi/phone-numbers', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiCall(API_CONFIG.ENDPOINTS.VAPI_PHONE_NUMBERS);
 
       if (response.ok) {
         const phoneData = await response.json();
@@ -444,7 +439,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         isOpen={isPhoneModalOpen}
         onClose={() => setIsPhoneModalOpen(false)}
         onPhoneCreated={handlePhoneCreated}
-        customerId={user?.sub || 'demo-customer'}
+        customerId={user?.userId || 'demo-customer'}
       />
     </div>
   );
