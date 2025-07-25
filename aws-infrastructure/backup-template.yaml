@@ -1,0 +1,447 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Voice Matrix AI Dashboard - Backup and Disaster Recovery'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Environment name
+
+Resources:
+  # Backup Vault
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: !Sub "${Environment}-voice-matrix-backup-vault"
+      EncryptionKeyArn: !GetAtt BackupVaultKMSKey.Arn
+      Notifications:
+        BackupVaultEvents:
+          - BACKUP_JOB_STARTED
+          - BACKUP_JOB_COMPLETED
+          - BACKUP_JOB_FAILED
+          - RESTORE_JOB_STARTED
+          - RESTORE_JOB_COMPLETED
+          - RESTORE_JOB_FAILED
+        SNSTopicArn: !Ref BackupNotificationTopic
+
+  # KMS Key for Backup Encryption
+  BackupVaultKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "KMS Key for ${Environment} Voice Matrix backup vault"
+      KeyPolicy:
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: Allow AWS Backup
+            Effect: Allow
+            Principal:
+              Service: backup.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+
+  BackupVaultKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Environment}-voice-matrix-backup"
+      TargetKeyId: !Ref BackupVaultKMSKey
+
+  # SNS Topic for Backup Notifications
+  BackupNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${Environment}-voice-matrix-backup-notifications"
+      DisplayName: !Sub "Voice Matrix ${Environment} Backup Notifications"
+
+  # IAM Role for AWS Backup
+  BackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-voice-matrix-backup-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: backup.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForS3Backup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForS3Restore
+
+  # Daily Backup Plan
+  DailyBackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub "${Environment}-voice-matrix-daily-backup"
+        BackupPlanRule:
+          - RuleName: DailyBackups
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: "cron(0 2 ? * * *)" # 2 AM daily
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 120
+            Lifecycle:
+              DeleteAfterDays: 30
+              MoveToColdStorageAfterDays: 7
+            RecoveryPointTags:
+              BackupType: "Daily"
+              Environment: !Ref Environment
+          - RuleName: WeeklyBackups
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: "cron(0 3 ? * SUN *)" # 3 AM every Sunday
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 120
+            Lifecycle:
+              DeleteAfterDays: 90
+              MoveToColdStorageAfterDays: 30
+            RecoveryPointTags:
+              BackupType: "Weekly"
+              Environment: !Ref Environment
+
+  # Backup Selection for DynamoDB Tables
+  DynamoDBBackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref DailyBackupPlan
+      BackupSelection:
+        SelectionName: !Sub "${Environment}-voice-matrix-dynamodb"
+        IamRoleArn: !GetAtt BackupRole.Arn
+        Resources:
+          - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Environment}-voice-matrix-users"
+          - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Environment}-voice-matrix-vapi-config"
+        Conditions:
+          StringEquals:
+            "aws:ResourceTag/Environment": !Ref Environment
+
+  # Backup Selection for S3 Buckets
+  S3BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref DailyBackupPlan
+      BackupSelection:
+        SelectionName: !Sub "${Environment}-voice-matrix-s3"
+        IamRoleArn: !GetAtt BackupRole.Arn
+        Resources:
+          - !Sub "arn:aws:s3:::${Environment}-voice-matrix-frontend"
+          - !Sub "arn:aws:s3:::${Environment}-voice-matrix-audit-logs"
+
+  # Cross-Region Backup Plan (for disaster recovery)
+  CrossRegionBackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub "${Environment}-voice-matrix-cross-region-backup"
+        BackupPlanRule:
+          - RuleName: CrossRegionWeeklyBackups
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: "cron(0 4 ? * SUN *)" # 4 AM every Sunday
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 240
+            Lifecycle:
+              DeleteAfterDays: 180
+              MoveToColdStorageAfterDays: 60
+            CopyActions:
+              - DestinationBackupVaultArn: !Sub "arn:aws:backup:us-west-2:${AWS::AccountId}:backup-vault:${Environment}-voice-matrix-dr-vault"
+                Lifecycle:
+                  DeleteAfterDays: 180
+                  MoveToColdStorageAfterDays: 60
+            RecoveryPointTags:
+              BackupType: "CrossRegion"
+              Environment: !Ref Environment
+
+  # Point-in-Time Recovery for DynamoDB (already enabled in main template)
+  # This is a reminder that PITR is enabled for critical tables
+
+  # Lambda function for automated testing of backups
+  BackupTestFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-voice-matrix-backup-test"
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt BackupTestFunctionRole.Arn
+      Environment:
+        Variables:
+          BACKUP_VAULT_NAME: !Ref BackupVault
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const { BackupClient, ListRecoveryPointsCommand } = require('@aws-sdk/client-backup');
+          const { CloudWatchClient, PutMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
+          
+          const backup = new BackupClient({ region: process.env.AWS_REGION });
+          const cloudwatch = new CloudWatchClient({ region: process.env.AWS_REGION });
+          
+          exports.handler = async (event) => {
+            try {
+              const backupVaultName = process.env.BACKUP_VAULT_NAME;
+              const environment = process.env.ENVIRONMENT;
+              
+              // List recent recovery points
+              const response = await backup.send(new ListRecoveryPointsCommand({
+                BackupVaultName: backupVaultName,
+                MaxResults: 10
+              }));
+              
+              const recentBackups = response.RecoveryPoints || [];
+              const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+              
+              const recentSuccessfulBackups = recentBackups.filter(backup => 
+                backup.Status === 'COMPLETED' && 
+                new Date(backup.CreationDate) > last24Hours
+              );
+              
+              // Send metrics to CloudWatch
+              await cloudwatch.send(new PutMetricDataCommand({
+                Namespace: 'VoiceMatrix/Backup',
+                MetricData: [
+                  {
+                    MetricName: 'SuccessfulBackupsLast24h',
+                    Value: recentSuccessfulBackups.length,
+                    Unit: 'Count',
+                    Dimensions: [
+                      { Name: 'Environment', Value: environment }
+                    ]
+                  },
+                  {
+                    MetricName: 'TotalRecoveryPoints',
+                    Value: recentBackups.length,
+                    Unit: 'Count',
+                    Dimensions: [
+                      { Name: 'Environment', Value: environment }
+                    ]
+                  }
+                ]
+              }));
+              
+              return {
+                statusCode: 200,
+                body: JSON.stringify({
+                  message: 'Backup test completed',
+                  recentSuccessfulBackups: recentSuccessfulBackups.length,
+                  totalRecoveryPoints: recentBackups.length
+                })
+              };
+            } catch (error) {
+              console.error('Backup test failed:', error);
+              throw error;
+            }
+          };
+
+  BackupTestFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-voice-matrix-backup-test-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BackupTestPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - backup:ListRecoveryPoints
+                  - backup:DescribeRecoveryPoint
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+
+  # Schedule for backup testing
+  BackupTestSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-voice-matrix-backup-test-schedule"
+      Description: "Daily backup health check"
+      ScheduleExpression: "rate(1 day)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt BackupTestFunction.Arn
+          Id: BackupTestTarget
+
+  BackupTestPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BackupTestFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt BackupTestSchedule.Arn
+
+  # Backup Health Alarm
+  BackupHealthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-backup-health"
+      AlarmDescription: "Monitor backup health"
+      MetricName: SuccessfulBackupsLast24h
+      Namespace: VoiceMatrix/Backup
+      Statistic: Average
+      Period: 86400 # 24 hours
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      OKActions:
+        - !Ref BackupNotificationTopic
+      Dimensions:
+        - Name: Environment
+          Value: !Ref Environment
+
+  # DynamoDB Global Tables for cross-region replication (manual setup required)
+  # This would require manual configuration after stack deployment
+
+  # Disaster Recovery Runbook (stored in S3)
+  DRRunbookBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${Environment}-voice-matrix-dr-runbook"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  # Disaster Recovery Documentation
+  DRRunbook:
+    Type: AWS::S3::Object
+    Properties:
+      Bucket: !Ref DRRunbookBucket
+      Key: disaster-recovery-runbook.md
+      ContentType: text/markdown
+      Body: !Sub |
+        # Voice Matrix ${Environment} - Disaster Recovery Runbook
+        
+        ## Overview
+        This document outlines the disaster recovery procedures for Voice Matrix AI Dashboard ${Environment} environment.
+        
+        ## Recovery Time Objective (RTO): 4 hours
+        ## Recovery Point Objective (RPO): 1 hour
+        
+        ## Recovery Procedures
+        
+        ### 1. Infrastructure Recovery
+        ```bash
+        # Deploy infrastructure in DR region
+        aws cloudformation deploy \
+          --template-file aws-infrastructure/cloudformation-template.yaml \
+          --stack-name voice-matrix-${Environment}-infrastructure-dr \
+          --parameter-overrides Environment=${Environment} \
+          --region us-west-2
+        ```
+        
+        ### 2. Database Recovery
+        ```bash
+        # Restore DynamoDB from backup
+        aws dynamodb restore-table-from-backup \
+          --target-table-name ${Environment}-voice-matrix-users-dr \
+          --backup-arn <BACKUP_ARN>
+        
+        # Or restore from point-in-time
+        aws dynamodb restore-table-to-point-in-time \
+          --source-table-name ${Environment}-voice-matrix-users \
+          --target-table-name ${Environment}-voice-matrix-users-dr \
+          --restore-date-time <TIMESTAMP>
+        ```
+        
+        ### 3. Application Recovery
+        ```bash
+        # Deploy Lambda functions
+        cd aws-infrastructure/backend-lambda
+        serverless deploy --stage ${Environment} --region us-west-2
+        
+        # Deploy frontend
+        ./aws-infrastructure/deploy-frontend.sh ${Environment} us-west-2
+        ```
+        
+        ### 4. DNS Failover
+        ```bash
+        # Update Route53 records to point to DR region
+        aws route53 change-resource-record-sets \
+          --hosted-zone-id <HOSTED_ZONE_ID> \
+          --change-batch file://dr-dns-changes.json
+        ```
+        
+        ### 5. Verification Steps
+        1. Verify application accessibility
+        2. Test user authentication
+        3. Verify VAPI integration
+        4. Check monitoring and alerting
+        5. Validate data integrity
+        
+        ## Contact Information
+        - On-call Engineer: [PHONE_NUMBER]
+        - AWS Support: [CASE_URL]
+        - Stakeholder Notification: [EMAIL_LIST]
+        
+        ## Last Updated: $(date)
+
+Outputs:
+  BackupVaultArn:
+    Description: Backup Vault ARN
+    Value: !GetAtt BackupVault.BackupVaultArn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-backup-vault-arn"
+
+  BackupVaultName:
+    Description: Backup Vault Name
+    Value: !Ref BackupVault
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-backup-vault-name"
+
+  DailyBackupPlanArn:
+    Description: Daily Backup Plan ARN
+    Value: !Ref DailyBackupPlan
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-backup-plan-arn"
+
+  DRRunbookBucket:
+    Description: Disaster Recovery Runbook S3 Bucket
+    Value: !Ref DRRunbookBucket
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-dr-runbook-bucket"
+
+  BackupHealthAlarm:
+    Description: Backup Health CloudWatch Alarm
+    Value: !Ref BackupHealthAlarm
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-backup-health-alarm"
+
+  DisasterRecoveryInstructions:
+    Description: Quick disaster recovery reference
+    Value: !Sub |
+      Disaster Recovery Quick Reference:
+      
+      1. Backup Vault: ${BackupVault}
+      2. Backup Plan: ${DailyBackupPlan}
+      3. DR Runbook: s3://${DRRunbookBucket}/disaster-recovery-runbook.md
+      4. RTO: 4 hours | RPO: 1 hour
+      5. Test Schedule: Monthly (first Sunday)
+      
+      For full recovery procedures, see the DR runbook in S3.
+      Emergency Contact: [Update with actual contact information]

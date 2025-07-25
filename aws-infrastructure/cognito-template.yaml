@@ -1,0 +1,353 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Voice Matrix AI Dashboard - Cognito Authentication Setup'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Environment name
+  
+  DomainName:
+    Type: String
+    Default: voicematrix.ai
+    Description: Domain name for the application
+
+Resources:
+  # Cognito User Pool
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${Environment}-voice-matrix-users"
+      AliasAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 7
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: given_name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: family_name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: custom:company
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: custom:role
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+      UsernameConfiguration:
+        CaseSensitive: false
+      UserPoolTags:
+        Environment: !Ref Environment
+        Application: VoiceMatrix
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+        EmailSubject: !Sub "Welcome to Voice Matrix - Verify your email"
+        EmailMessage: |
+          Welcome to Voice Matrix AI Dashboard!
+          
+          Your verification code is: {####}
+          
+          Please enter this code in the application to complete your registration.
+          
+          If you didn't request this, please ignore this email.
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  # Cognito User Pool Client (Web App)
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub "${Environment}-voice-matrix-web-client"
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ReadAttributes:
+        - email
+        - given_name
+        - family_name
+        - custom:company
+        - custom:role
+      WriteAttributes:
+        - email
+        - given_name
+        - family_name
+        - custom:company
+        - custom:role
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - !Sub "https://${DomainName}/auth/callback"
+        - !Sub "https://www.${DomainName}/auth/callback"
+        - "http://localhost:3000/auth/callback"
+      LogoutURLs:
+        - !Sub "https://${DomainName}"
+        - !Sub "https://www.${DomainName}"
+        - "http://localhost:3000"
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - phone
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+
+  # Cognito User Pool Domain
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${Environment}-voice-matrix-auth"
+      UserPoolId: !Ref UserPool
+
+  # Cognito Identity Pool
+  IdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Sub "${Environment}-voice-matrix-identity"
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+
+  # IAM Roles for Cognito Identity Pool
+  CognitoAuthenticatedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-voice-matrix-cognito-authenticated"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: CognitoAuthenticatedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-sync:*
+                  - cognito-identity:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - execute-api:Invoke
+                Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/user/*"
+              - Effect: Allow
+                Action:
+                  - execute-api:Invoke
+                Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/vapi/*"
+
+  CognitoUnauthenticatedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-voice-matrix-cognito-unauthenticated"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+      Policies:
+        - PolicyName: CognitoUnauthenticatedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-sync:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - execute-api:Invoke
+                Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/auth/*"
+
+  # Attach roles to identity pool
+  IdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthenticatedRole.Arn
+        unauthenticated: !GetAtt CognitoUnauthenticatedRole.Arn
+
+  # Lambda for Cognito triggers
+  CognitoTriggerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-voice-matrix-cognito-trigger"
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt CognitoTriggerRole.Arn
+      Environment:
+        Variables:
+          USERS_TABLE: !Sub "${Environment}-voice-matrix-users"
+      Code:
+        ZipFile: |
+          const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+          const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+          
+          const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+          const docClient = DynamoDBDocumentClient.from(dynamoClient);
+          
+          exports.handler = async (event) => {
+            console.log('Cognito trigger event:', JSON.stringify(event, null, 2));
+            
+            if (event.triggerSource === 'PostConfirmation_ConfirmSignUp') {
+              // User has confirmed their email, create user record in DynamoDB
+              try {
+                const user = {
+                  userId: event.request.userAttributes.sub,
+                  email: event.request.userAttributes.email,
+                  role: 'user',
+                  isActive: true,
+                  createdAt: new Date().toISOString(),
+                  cognitoConfirmed: true,
+                  profile: {
+                    firstName: event.request.userAttributes.given_name,
+                    lastName: event.request.userAttributes.family_name,
+                    company: event.request.userAttributes['custom:company']
+                  }
+                };
+                
+                await docClient.send(new PutCommand({
+                  TableName: process.env.USERS_TABLE,
+                  Item: user
+                }));
+                
+                console.log('User created in DynamoDB:', user.userId);
+              } catch (error) {
+                console.error('Error creating user in DynamoDB:', error);
+                // Don't fail the signup process
+              }
+            }
+            
+            return event;
+          };
+
+  CognitoTriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-voice-matrix-cognito-trigger-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Environment}-voice-matrix-users"
+
+  # Permission for Cognito to invoke Lambda
+  CognitoTriggerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CognitoTriggerFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  # Update User Pool with Lambda triggers
+  UserPoolLambdaConfig:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${Environment}-voice-matrix-users"
+      LambdaConfig:
+        PostConfirmation: !GetAtt CognitoTriggerFunction.Arn
+      # ... (other properties same as UserPool above)
+
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-user-pool-id"
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-user-pool-client-id"
+
+  IdentityPoolId:
+    Description: Cognito Identity Pool ID
+    Value: !Ref IdentityPool
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-identity-pool-id"
+
+  UserPoolDomain:
+    Description: Cognito User Pool Domain
+    Value: !Sub "${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-cognito-domain"
+
+  CognitoAuthenticatedRoleArn:
+    Description: Cognito Authenticated Role ARN
+    Value: !GetAtt CognitoAuthenticatedRole.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-cognito-auth-role"
+
+  CognitoUnauthenticatedRoleArn:
+    Description: Cognito Unauthenticated Role ARN
+    Value: !GetAtt CognitoUnauthenticatedRole.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-cognito-unauth-role"

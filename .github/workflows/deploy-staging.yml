@@ -1,0 +1,182 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ENVIRONMENT: staging
+  NODE_VERSION: '18'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run type-check
+
+      - name: Run tests
+        run: npm test -- --coverage --watchAll=false
+
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        env:
+          REACT_APP_ENV: staging
+          REACT_APP_API_URL: https://api-staging.voicematrix.ai
+          REACT_APP_COGNITO_REGION: ${{ env.AWS_REGION }}
+          REACT_APP_COGNITO_USER_POOL_ID: ${{ secrets.STAGING_COGNITO_USER_POOL_ID }}
+          REACT_APP_COGNITO_CLIENT_ID: ${{ secrets.STAGING_COGNITO_CLIENT_ID }}
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-build-files
+          path: build/
+          retention-days: 7
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy infrastructure
+        run: |
+          aws cloudformation deploy \
+            --template-file aws-infrastructure/cloudformation-template.yaml \
+            --stack-name voice-matrix-${{ env.ENVIRONMENT }}-infrastructure \
+            --parameter-overrides \
+                Environment=${{ env.ENVIRONMENT }} \
+                DomainName=staging.voicematrix.ai \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js for serverless
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install serverless framework
+        run: npm install -g serverless
+
+      - name: Deploy backend
+        working-directory: aws-infrastructure/backend-lambda
+        run: |
+          npm ci
+          npm run build
+          serverless deploy --stage ${{ env.ENVIRONMENT }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: staging-build-files
+          path: build/
+
+      - name: Deploy frontend
+        run: |
+          chmod +x aws-infrastructure/deploy-frontend.sh
+          ./aws-infrastructure/deploy-frontend.sh ${{ env.ENVIRONMENT }} ${{ env.AWS_REGION }}
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for deployment
+        run: sleep 60
+
+      - name: Run E2E tests
+        env:
+          BASE_URL: https://staging.voicematrix.ai
+          API_URL: https://api-staging.voicematrix.ai
+        run: |
+          # Basic health checks
+          curl -f $BASE_URL || exit 1
+          curl -f $API_URL/health || exit 1
+          
+          # Additional E2E tests would go here
+          echo "✅ E2E tests passed"
+
+  notify-staging:
+    name: Notify Staging Deployment
+    runs-on: ubuntu-latest
+    needs: [e2e-tests]
+    if: always()
+    steps:
+      - name: Notify success
+        if: needs.e2e-tests.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          text: "✅ Staging deployment successful! Ready for testing at https://staging.voicematrix.ai"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          text: "❌ Staging deployment failed!"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

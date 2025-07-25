@@ -1,0 +1,514 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Voice Matrix AI Dashboard - Monitoring and Logging Setup'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Environment name
+  
+  AlertEmail:
+    Type: String
+    Description: Email address for receiving alerts
+    Default: alerts@voicematrix.ai
+
+Resources:
+  # SNS Topic for Alerts
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${Environment}-voice-matrix-alerts"
+      DisplayName: !Sub "Voice Matrix ${Environment} Alerts"
+
+  # SNS Subscription for Email Alerts
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # CloudWatch Log Groups
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Environment}-voice-matrix"
+      RetentionInDays: 30
+
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${Environment}-voice-matrix"
+      RetentionInDays: 30
+
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/voice-matrix/${Environment}/application"
+      RetentionInDays: 30
+
+  # CloudWatch Alarms
+
+  # Lambda Error Rate Alarm
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-lambda-errors"
+      AlarmDescription: "High error rate in Lambda functions"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+  # Lambda Duration Alarm
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-lambda-duration"
+      AlarmDescription: "High duration in Lambda functions"
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10000
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # DynamoDB Read Throttles
+  DynamoDBReadThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-dynamodb-read-throttles"
+      AlarmDescription: "DynamoDB read throttles detected"
+      MetricName: ReadThrottledEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # DynamoDB Write Throttles
+  DynamoDBWriteThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-dynamodb-write-throttles"
+      AlarmDescription: "DynamoDB write throttles detected"
+      MetricName: WriteThrottledEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # API Gateway 4xx Errors
+  ApiGateway4xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-api-4xx-errors"
+      AlarmDescription: "High 4xx error rate in API Gateway"
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # API Gateway 5xx Errors
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-api-5xx-errors"
+      AlarmDescription: "High 5xx error rate in API Gateway"
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # CloudFront Origin Errors
+  CloudFrontOriginErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Environment}-voice-matrix-cloudfront-origin-errors"
+      AlarmDescription: "High origin error rate in CloudFront"
+      MetricName: OriginLatency
+      Namespace: AWS/CloudFront
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5000
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # Custom Metrics and Dashboard
+  ApplicationDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${Environment}-voice-matrix-dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${Environment}-voice-matrix-auth" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Auth Function Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${Environment}-voice-matrix-vapi" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda VAPI Function Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${Environment}-voice-matrix-users" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Users Table Capacity",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${Environment}-voice-matrix-vapi-config" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB VAPI Config Table Capacity",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "${Environment}-voice-matrix-backend" ],
+                  [ ".", "Latency", ".", "." ],
+                  [ ".", "4XXError", ".", "." ],
+                  [ ".", "5XXError", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/CloudFront", "Requests", "DistributionId", "${CloudFrontDistributionId}" ],
+                  [ ".", "BytesDownloaded", ".", "." ],
+                  [ ".", "OriginLatency", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-east-1",
+                "title": "CloudFront Metrics",
+                "period": 300
+              }
+            }
+          ]
+        }
+
+  # X-Ray Tracing
+  XRayServiceMap:
+    Type: AWS::XRay::Group
+    Properties:
+      GroupName: !Sub "${Environment}-voice-matrix-service-map"
+      FilterExpression: "service(\"voice-matrix\")"
+
+  # CloudTrail for API Auditing
+  CloudTrail:
+    Type: AWS::CloudTrail::Trail
+    Properties:
+      TrailName: !Sub "${Environment}-voice-matrix-audit-trail"
+      S3BucketName: !Ref AuditLogsBucket
+      IncludeGlobalServiceEvents: true
+      IsLogging: true
+      IsMultiRegionTrail: true
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true
+          DataResources:
+            - Type: "AWS::DynamoDB::Table"
+              Values: 
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Environment}-voice-matrix-*"
+            - Type: "AWS::S3::Object"
+              Values:
+                - !Sub "arn:aws:s3:::${Environment}-voice-matrix-frontend/*"
+
+  # S3 Bucket for Audit Logs
+  AuditLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${Environment}-voice-matrix-audit-logs"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+              - StorageClass: GLACIER
+                TransitionInDays: 60
+
+  # CloudTrail Bucket Policy
+  AuditLogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AuditLogsBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !Sub "${AuditLogsBucket}"
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${AuditLogsBucket}/*"
+            Condition:
+              StringEquals:
+                "s3:x-amz-acl": bucket-owner-full-control
+
+  # Custom Lambda for Application Metrics
+  MetricsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-voice-matrix-metrics"
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt MetricsFunctionRole.Arn
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const { CloudWatchClient, PutMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
+          const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+          const { DynamoDBDocumentClient, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+          
+          const cloudwatch = new CloudWatchClient({ region: process.env.AWS_REGION });
+          const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+          const docClient = DynamoDBDocumentClient.from(dynamoClient);
+          
+          exports.handler = async (event) => {
+            try {
+              const environment = process.env.ENVIRONMENT;
+              
+              // Count active users
+              const usersResult = await docClient.send(new ScanCommand({
+                TableName: `${environment}-voice-matrix-users`,
+                FilterExpression: 'isActive = :active',
+                ExpressionAttributeValues: { ':active': true },
+                Select: 'COUNT'
+              }));
+              
+              // Count users with VAPI config
+              const vapiResult = await docClient.send(new ScanCommand({
+                TableName: `${environment}-voice-matrix-vapi-config`,
+                Select: 'COUNT'
+              }));
+              
+              // Send custom metrics
+              await cloudwatch.send(new PutMetricDataCommand({
+                Namespace: 'VoiceMatrix/Application',
+                MetricData: [
+                  {
+                    MetricName: 'ActiveUsers',
+                    Value: usersResult.Count || 0,
+                    Unit: 'Count',
+                    Dimensions: [
+                      { Name: 'Environment', Value: environment }
+                    ]
+                  },
+                  {
+                    MetricName: 'UsersWithVAPI',
+                    Value: vapiResult.Count || 0,
+                    Unit: 'Count',
+                    Dimensions: [
+                      { Name: 'Environment', Value: environment }
+                    ]
+                  },
+                  {
+                    MetricName: 'VAPIAdoptionRate',
+                    Value: usersResult.Count > 0 ? (vapiResult.Count / usersResult.Count) * 100 : 0,
+                    Unit: 'Percent',
+                    Dimensions: [
+                      { Name: 'Environment', Value: environment }
+                    ]
+                  }
+                ]
+              }));
+              
+              return { statusCode: 200, body: 'Metrics sent successfully' };
+            } catch (error) {
+              console.error('Error sending metrics:', error);
+              return { statusCode: 500, body: 'Error sending metrics' };
+            }
+          };
+
+  MetricsFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-voice-matrix-metrics-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: MetricsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Environment}-voice-matrix-users"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Environment}-voice-matrix-vapi-config"
+
+  # Schedule for Metrics Collection
+  MetricsSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-voice-matrix-metrics-schedule"
+      Description: "Schedule for collecting Voice Matrix metrics"
+      ScheduleExpression: "rate(5 minutes)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt MetricsFunction.Arn
+          Id: MetricsTarget
+
+  MetricsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MetricsFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MetricsSchedule.Arn
+
+Outputs:
+  AlertTopicArn:
+    Description: SNS Topic ARN for alerts
+    Value: !Ref AlertTopic
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-alert-topic"
+
+  DashboardURL:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${Environment}-voice-matrix-dashboard"
+
+  LogGroups:
+    Description: CloudWatch Log Groups
+    Value: !Sub |
+      Lambda Logs: ${LambdaLogGroup}
+      API Gateway Logs: ${ApiGatewayLogGroup}
+      Application Logs: ${ApplicationLogGroup}
+
+  AuditTrailArn:
+    Description: CloudTrail ARN for audit logging
+    Value: !GetAtt CloudTrail.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-audit-trail"

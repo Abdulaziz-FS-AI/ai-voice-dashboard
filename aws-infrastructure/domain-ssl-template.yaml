@@ -1,0 +1,293 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Voice Matrix AI Dashboard - Custom Domain and SSL Certificate Setup'
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: voicematrix.ai
+    Description: Domain name for the application
+  
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Environment name
+  
+  HostedZoneId:
+    Type: String
+    Description: Route53 Hosted Zone ID for the domain (optional - leave blank if managing DNS externally)
+    Default: ""
+
+Conditions:
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+
+Resources:
+  # SSL Certificate for CloudFront (must be in us-east-1)
+  SSLCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub "*.${DomainName}"
+        - !Sub "www.${DomainName}"
+        - !Sub "api.${DomainName}"
+        - !Sub "auth.${DomainName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !If [HasHostedZone, !Ref HostedZoneId, !Ref "AWS::NoValue"]
+        - DomainName: !Sub "*.${DomainName}"
+          HostedZoneId: !If [HasHostedZone, !Ref HostedZoneId, !Ref "AWS::NoValue"]
+      Tags:
+        - Key: Name
+          Value: !Sub "${Environment}-voice-matrix-ssl"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # API Gateway Custom Domain
+  ApiGatewayDomainName:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Sub "api.${DomainName}"
+      RegionalCertificateArn: !Ref RegionalSSLCertificate
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      SecurityPolicy: TLS_1_2
+      Tags:
+        - Key: Name
+          Value: !Sub "${Environment}-voice-matrix-api-domain"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Regional SSL Certificate for API Gateway
+  RegionalSSLCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub "api.${DomainName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Sub "api.${DomainName}"
+          HostedZoneId: !If [HasHostedZone, !Ref HostedZoneId, !Ref "AWS::NoValue"]
+      Tags:
+        - Key: Name
+          Value: !Sub "${Environment}-voice-matrix-api-ssl"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Route53 Records (only if HostedZone is provided)
+  MainDomainRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt 
+          - CloudFrontDistribution
+          - DomainName
+        HostedZoneId: Z2FDTNDATAQYW2 # CloudFront hosted zone ID (global)
+        EvaluateTargetHealth: false
+
+  WWWDomainRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "www.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt 
+          - CloudFrontDistribution
+          - DomainName
+        HostedZoneId: Z2FDTNDATAQYW2 # CloudFront hosted zone ID (global)
+        EvaluateTargetHealth: false
+
+  ApiDomainRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "api.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ApiGatewayDomainName.RegionalDomainName
+        HostedZoneId: !GetAtt ApiGatewayDomainName.RegionalHostedZoneId
+        EvaluateTargetHealth: false
+
+  # Update CloudFront Distribution to use custom domain
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref DomainName
+          - !Sub "www.${DomainName}"
+        ViewerCertificate:
+          AcmCertificateArn: !Ref SSLCertificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          ForwardedValues:
+            QueryString: true
+            Headers: []
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: S3Origin
+            DomainName: !ImportValue 
+              Fn::Sub: "${Environment}-voice-matrix-frontend-bucket.s3.${AWS::Region}.amazonaws.com"
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        Comment: !Sub "Voice Matrix ${Environment} - CloudFront Distribution"
+        Tags:
+          - Key: Name
+            Value: !Sub "${Environment}-voice-matrix-cloudfront"
+          - Key: Environment
+            Value: !Ref Environment
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub "OAI for ${Environment}-voice-matrix"
+
+  # WAF Web ACL for CloudFront (optional security)
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${Environment}-voice-matrix-waf"
+      Description: !Sub "WAF for Voice Matrix ${Environment}"
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: CommonRuleSetMetric
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: KnownBadInputsRuleSetMetric
+        - Name: RateLimitRule
+          Priority: 3
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitRule
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "${Environment}VoiceMatrixWebACL"
+      Tags:
+        - Key: Name
+          Value: !Sub "${Environment}-voice-matrix-waf"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Associate WAF with CloudFront
+  WebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
+      WebACLArn: !GetAtt WebACL.Arn
+
+Outputs:
+  SSLCertificateArn:
+    Description: SSL Certificate ARN for CloudFront
+    Value: !Ref SSLCertificate
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-ssl-cert-arn"
+
+  RegionalSSLCertificateArn:
+    Description: Regional SSL Certificate ARN for API Gateway
+    Value: !Ref RegionalSSLCertificate
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-regional-ssl-cert-arn"
+
+  ApiGatewayDomainName:
+    Description: API Gateway Custom Domain Name
+    Value: !Ref ApiGatewayDomainName
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-api-domain-name"
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-cloudfront-id"
+
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-cloudfront-domain"
+
+  WebACLArn:
+    Description: WAF Web ACL ARN
+    Value: !GetAtt WebACL.Arn
+    Export:
+      Name: !Sub "${Environment}-voice-matrix-waf-arn"
+
+  DomainSetupInstructions:
+    Description: Instructions for completing domain setup
+    Value: !Sub |
+      Domain Setup Instructions:
+      
+      1. Main Domain (${DomainName}):
+         - Type: A Record (Alias)
+         - Value: ${CloudFrontDistribution.DomainName}
+         
+      2. WWW Subdomain (www.${DomainName}):
+         - Type: A Record (Alias) 
+         - Value: ${CloudFrontDistribution.DomainName}
+         
+      3. API Subdomain (api.${DomainName}):
+         - Type: A Record (Alias)
+         - Value: ${ApiGatewayDomainName.RegionalDomainName}
+         
+      4. SSL Certificate Validation:
+         - Certificate ARN: ${SSLCertificate}
+         - Validation method: DNS
+         - Add the CNAME records to your DNS provider for validation
+         
+      Note: If using Route53, records are automatically created.
+      For external DNS providers, manually add these records.

@@ -1,0 +1,129 @@
+service: voice-matrix-backend
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'production'}
+  memorySize: 256
+  timeout: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    USERS_TABLE: ${self:provider.stage}-voice-matrix-users
+    VAPI_CONFIG_TABLE: ${self:provider.stage}-voice-matrix-vapi-config
+    VAPI_SECRET_NAME: voice-matrix/${self:provider.stage}/vapi-api-key
+  vpc:
+    securityGroupIds:
+      - ${cf:voice-matrix-${self:provider.stage}-infrastructure.LambdaSecurityGroupId}
+    subnetIds:
+      - ${cf:voice-matrix-${self:provider.stage}-infrastructure.PrivateSubnet1Id}
+      - ${cf:voice-matrix-${self:provider.stage}-infrastructure.PrivateSubnet2Id}
+  iam:
+    role:
+      name: ${self:provider.stage}-voice-matrix-lambda-role
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.VAPI_CONFIG_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}/index/*
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+            - secretsmanager:PutSecretValue
+            - secretsmanager:CreateSecret
+            - secretsmanager:UpdateSecret
+          Resource:
+            - arn:aws:secretsmanager:${self:provider.region}:*:secret:voice-matrix/*
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+
+functions:
+  # Authentication
+  auth:
+    handler: src/handlers/auth.handler
+    events:
+      - http:
+          path: /auth/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # User Management
+  user:
+    handler: src/handlers/user.handler
+    events:
+      - http:
+          path: /user/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # VAPI Integration
+  vapi:
+    handler: src/handlers/vapi.handler
+    events:
+      - http:
+          path: /vapi/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # Admin Functions
+  admin:
+    handler: src/handlers/admin.handler
+    events:
+      - http:
+          path: /admin/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+custom:
+  serverless-offline:
+    httpPort: 3001
+    lambdaPort: 3002
