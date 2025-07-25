@@ -132,9 +132,9 @@ class VapiClient {
   }
 }
 
-// Default VAPI configuration
+// Default VAPI configuration - NEVER expose API keys in frontend!
 export const defaultVapiConfig: VapiConfig = {
-  apiKey: process.env.REACT_APP_VAPI_API_KEY || '',
+  apiKey: '', // API key should only be handled by backend
   baseUrl: 'https://api.vapi.ai',
 };
 
@@ -149,8 +149,12 @@ export const createVapiClient = (config?: Partial<VapiConfig>): VapiClient => {
 // Pre-built assistant templates - Users should create their own
 export const assistantTemplates: Omit<VapiAssistant, 'id'>[] = [];
 
-// Utility functions
+// Utility functions - API validation should be done through backend
 export const validateVapiApiKey = async (apiKey: string): Promise<boolean> => {
+  // WARNING: This function should only be used for testing purposes
+  // In production, API key validation must be done through backend
+  console.warn('SECURITY WARNING: API key validation should be done through backend, not frontend');
+  
   try {
     const client = createVapiClient({ apiKey });
     await client.getAccount();

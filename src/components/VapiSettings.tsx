@@ -95,45 +95,91 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
   const loadAssistants = useCallback(async (key: string) => {
     setLoading(true);
     try {
-      const client = createVapiClient({ apiKey: key });
-      const vapiAssistants = await client.getAssistants();
-      setAssistants(vapiAssistants);
+      // SECURITY FIX: Use backend proxy instead of direct VAPI calls
+      if (!user || testMode) {
+        // In test mode, use mock data instead of real API calls
+        setAssistants([]);
+        setLoading(false);
+        return;
+      }
+
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/assistants`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const vapiAssistants = await response.json();
+        setAssistants(vapiAssistants);
+      } else {
+        throw new Error('Failed to load assistants from backend');
+      }
     } catch (err) {
       setError('Failed to load assistants from VAPI');
       console.error('Error loading assistants:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user, testMode]);
 
   const loadAccountInfo = useCallback(async (key: string) => {
     try {
-      const client = createVapiClient({ apiKey: key });
-      const account = await client.getAccount();
-      setAccountInfo(account);
+      // SECURITY FIX: Account info should also be loaded through backend
+      if (!user || testMode) {
+        setAccountInfo({ name: 'Test Account', credits: 100 });
+        return;
+      }
+
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/vapi/account`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const account = await response.json();
+        setAccountInfo(account);
+      } else {
+        setAccountInfo(null);
+      }
     } catch (err) {
       console.error('Error loading account info:', err);
     }
-  }, []);
+  }, [user, testMode]);
 
   const validateAndLoadAssistants = useCallback(async (key: string) => {
     setIsValidating(true);
     setError('');
     
     try {
-      const valid = await validateVapiApiKey(key);
-      setIsValid(valid);
-      
-      if (valid) {
-        localStorage.setItem('vapi_api_key', key);
-        await saveApiKeyToBackend(key);
+      // SECURITY FIX: API key validation should be done through backend
+      if (testMode) {
+        setIsValid(true);
         await Promise.all([
           loadAssistants(key),
           loadAccountInfo(key)
         ]);
-      } else {
-        setError('Invalid VAPI API key');
+        return;
       }
+
+      // Save key to backend first, which will validate it
+      await saveApiKeyToBackend(key);
+      setIsValid(true);
+      
+      // Load data through backend
+      await Promise.all([
+        loadAssistants(key),
+        loadAccountInfo(key)
+      ]);
     } catch (err) {
       setError('Failed to validate API key');
       setIsValid(false);

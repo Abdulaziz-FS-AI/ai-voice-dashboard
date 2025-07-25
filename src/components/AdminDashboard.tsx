@@ -153,7 +153,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
     <div className="admin-assistants">
       <div className="section-header">
         <h3>Assistant Configuration</h3>
-        <button className="add-button">+ Create Assistant</button>
+        <button 
+          className="add-button"
+          onClick={() => onNavigate('editor')}
+        >
+          + Create Assistant
+        </button>
       </div>
       
       <div className="assistants-grid">
@@ -183,7 +188,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
             </div>
             
             <div className="assistant-actions">
-              <button className="action-btn edit">Configure</button>
+              <button 
+                className="action-btn edit"
+                onClick={() => onNavigate('editor')}
+              >
+                Configure
+              </button>
               <button className="action-btn settings">Settings</button>
             </div>
           </div>
