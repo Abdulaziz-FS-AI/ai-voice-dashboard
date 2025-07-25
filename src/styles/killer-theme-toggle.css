@@ -1,0 +1,358 @@
+/* 🔥 KILLER THEME TOGGLE STYLES 🔥 */
+
+.killer-theme-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+}
+
+/* Label Styles */
+.killer-theme-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.label-text {
+  opacity: 0.5;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(0.9);
+}
+
+.label-text.active {
+  opacity: 1;
+  transform: scale(1);
+  color: var(--brand-primary);
+  text-shadow: 0 0 8px rgba(218, 165, 32, 0.3);
+}
+
+/* Main Toggle Button */
+.killer-theme-toggle {
+  position: relative;
+  width: 70px;
+  height: 36px;
+  border: none;
+  border-radius: 18px;
+  cursor: pointer;
+  background: transparent;
+  padding: 2px;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.killer-theme-toggle:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+}
+
+.killer-theme-toggle:active {
+  transform: scale(0.98);
+}
+
+/* Track Background */
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.track-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    #87CEEB 0%, 
+    #4169E1 50%, 
+    #191970 100%);
+  transition: all 0.5s ease;
+}
+
+.killer-theme-toggle.dark .track-bg {
+  background: linear-gradient(135deg, 
+    #1a1a2e 0%, 
+    #16213e 30%, 
+    #0f0f23 70%, 
+    #000 100%);
+}
+
+.track-glow {
+  position: absolute;
+  inset: -2px;
+  background: conic-gradient(from 0deg, 
+    transparent, 
+    rgba(218, 165, 32, 0.4), 
+    transparent, 
+    rgba(255, 215, 0, 0.3), 
+    transparent);
+  border-radius: 20px;
+  z-index: -1;
+  animation: rotate 3s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.killer-theme-toggle:hover .track-glow {
+  opacity: 1;
+}
+
+@keyframes rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Icons in Track */
+.toggle-icons {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  z-index: 1;
+}
+
+.icon-sun, .icon-moon {
+  font-size: 16px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+}
+
+.killer-theme-toggle.light .icon-sun {
+  transform: scale(1.2) rotate(180deg);
+  filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.8));
+  animation: sunRays 2s ease-in-out infinite;
+}
+
+.killer-theme-toggle.dark .icon-moon {
+  transform: scale(1.2) rotate(-20deg);
+  filter: drop-shadow(0 0 8px rgba(147, 197, 253, 0.8));
+  animation: moonGlow 3s ease-in-out infinite;
+}
+
+@keyframes sunRays {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.8)); }
+  50% { filter: drop-shadow(0 0 16px rgba(255, 193, 7, 1)) drop-shadow(0 0 24px rgba(255, 193, 7, 0.4)); }
+}
+
+@keyframes moonGlow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(147, 197, 253, 0.8)); }
+  50% { filter: drop-shadow(0 0 12px rgba(147, 197, 253, 1)) drop-shadow(0 0 20px rgba(147, 197, 253, 0.4)); }
+}
+
+/* Sliding Thumb */
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ffffff, #f0f0f0);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 3;
+  transform-style: preserve-3d;
+}
+
+.killer-theme-toggle.dark .toggle-thumb {
+  transform: translateX(34px);
+  background: linear-gradient(145deg, #2d3748, #1a202c);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.thumb-inner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: inherit;
+  overflow: hidden;
+}
+
+.thumb-icon {
+  font-size: 14px;
+  transition: all 0.3s ease;
+  animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.thumb-glow {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: radial-gradient(circle, 
+    rgba(218, 165, 32, 0.3) 0%, 
+    transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.killer-theme-toggle:hover .thumb-glow {
+  opacity: 1;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.2); opacity: 0.6; }
+}
+
+/* Particle Effects */
+.toggle-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--brand-primary);
+  border-radius: 50%;
+  opacity: 0;
+  transition: all 0.4s ease;
+}
+
+.killer-theme-toggle:active .particle,
+.killer-theme-toggle.clicked .particle {
+  opacity: 1;
+  animation: particleExplode 0.6s ease-out;
+}
+
+.killer-theme-toggle.clicked {
+  animation: buttonClickWave 0.6s ease-out;
+}
+
+@keyframes buttonClickWave {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(218, 165, 32, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(218, 165, 32, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 20px rgba(218, 165, 32, 0);
+  }
+}
+
+.particle-1 { top: 20%; left: 10%; animation-delay: 0s; }
+.particle-2 { top: 70%; left: 15%; animation-delay: 0.1s; }
+.particle-3 { top: 30%; right: 20%; animation-delay: 0.2s; }
+.particle-4 { bottom: 25%; right: 10%; animation-delay: 0.3s; }
+.particle-5 { top: 60%; left: 50%; animation-delay: 0.4s; }
+.particle-6 { bottom: 40%; right: 40%; animation-delay: 0.5s; }
+
+@keyframes particleExplode {
+  0% {
+    transform: scale(0) translate(0, 0);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1) translate(var(--random-x, 20px), var(--random-y, -20px));
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0) translate(var(--random-x, 40px), var(--random-y, -40px));
+    opacity: 0;
+  }
+}
+
+/* Size Variations */
+.killer-theme-toggle-container.small .killer-theme-toggle {
+  width: 50px;
+  height: 26px;
+}
+
+.killer-theme-toggle-container.small .toggle-thumb {
+  width: 22px;
+  height: 22px;
+  top: 2px;
+  left: 2px;
+}
+
+.killer-theme-toggle-container.small.dark .toggle-thumb {
+  transform: translateX(24px);
+}
+
+.killer-theme-toggle-container.small .thumb-icon {
+  font-size: 10px;
+}
+
+.killer-theme-toggle-container.large .killer-theme-toggle {
+  width: 90px;
+  height: 46px;
+}
+
+.killer-theme-toggle-container.large .toggle-thumb {
+  width: 40px;
+  height: 40px;
+  top: 3px;
+  left: 3px;
+}
+
+.killer-theme-toggle-container.large.dark .toggle-thumb {
+  transform: translateX(44px);
+}
+
+.killer-theme-toggle-container.large .thumb-icon {
+  font-size: 18px;
+}
+
+/* Accessibility & Focus States */
+.killer-theme-toggle:focus {
+  outline: none;
+}
+
+.killer-theme-toggle:focus-visible {
+  box-shadow: 
+    0 0 0 2px var(--bg-primary),
+    0 0 0 4px var(--brand-primary);
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .killer-theme-toggle,
+  .toggle-thumb,
+  .track-bg,
+  .thumb-icon,
+  .icon-sun,
+  .icon-moon {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Dark Theme Adjustments */
+.dark-theme .killer-theme-toggle-container {
+  filter: brightness(1.1);
+}
+
+.dark-theme .track-glow {
+  background: conic-gradient(from 0deg, 
+    transparent, 
+    rgba(147, 197, 253, 0.4), 
+    transparent, 
+    rgba(59, 130, 246, 0.3), 
+    transparent);
+}
