@@ -123,7 +123,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   if (currentView === 'vapi-settings') {
-    return <VapiSettings onBack={() => setCurrentView('dashboard')} testMode={testMode} />;
+    return <VapiSettings onBack={() => setCurrentView('dashboard')} testMode={testMode} isAdmin={isAdmin} />;
   }
 
   return (
