@@ -40,7 +40,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
             <a href="#features" className="nav-link">Features</a>
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
-            <button className="nav-test" onClick={onTestLogin}>Test</button>
+            <button className="nav-test" onClick={onTestLogin}>🎯 Demo (PIN: 123456)</button>
             <button className="nav-cta" onClick={handleGetStarted}>Get Started</button>
           </div>
         </div>
@@ -71,7 +71,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
                 <span className="play-icon">▶</span>
               </button>
               <button className="cta-test" onClick={onTestLogin}>
-                Test Demo
+                🎯 Test Demo (PIN: 123456)
               </button>
             </div>
             <div className="hero-stats">

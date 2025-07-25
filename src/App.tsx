@@ -94,6 +94,7 @@ const AppContent: React.FC = () => {
   const handlePinLogin = () => {
     setShowTestLogin(false);
     setTestMode(true);
+    setIsAdminUnlocked(true); // Grant admin access for test demo
     setCurrentPage('dashboard');
   };
 

@@ -177,6 +177,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             </button>
           )}
           
+          {testMode && (
+            <div className="test-mode-notice">
+              🎯 Demo Mode: Full admin access enabled (PIN: 123456)
+            </div>
+          )}
+          
           {user && (
             <div className="user-section">
               <span className="user-name">Welcome, {userName || 'User'}{isAdmin && ' (Admin)'}</span>

@@ -482,6 +482,24 @@
   font-style: italic;
 }
 
+/* Test Mode Notice */
+.test-mode-notice {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+  animation: pulse 2s infinite;
+  margin-left: 1rem;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
 @media (max-width: 768px) {
   .dashboard-content {
     grid-template-columns: 1fr;

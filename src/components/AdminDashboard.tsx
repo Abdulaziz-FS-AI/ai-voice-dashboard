@@ -300,6 +300,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogo
         <div className="admin-title">
           <h1>👑 Admin Dashboard</h1>
           <span className="admin-subtitle">Voice Matrix Administration</span>
+          {isCodeUnlocked && (
+            <div className="demo-mode-badge">
+              🎯 Demo Mode Active (PIN: 123456)
+            </div>
+          )}
         </div>
         <div className="admin-controls">
           <button className="back-to-dashboard-btn" onClick={() => onNavigate('dashboard')}>
