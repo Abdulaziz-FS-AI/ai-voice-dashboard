@@ -6,7 +6,11 @@ import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.REGION });
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true
+  }
+});
 const secretsClient = new SecretsManagerClient({ region: process.env.REGION });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'voice-matrix-secret-key';
@@ -148,7 +152,13 @@ async function getVapiApiKey(userId: string): Promise<string | null> {
       return result.Item.apiKey;
     }
 
-    // Fallback to admin API key from Secrets Manager
+    // Second, try environment variable (for admin/default key)
+    if (process.env.ADMIN_VAPI_API_KEY) {
+      console.log('Using admin VAPI API key from environment variable');
+      return process.env.ADMIN_VAPI_API_KEY;
+    }
+
+    // Third, fallback to admin API key from Secrets Manager
     const secret = await secretsClient.send(new GetSecretValueCommand({
       SecretId: VAPI_SECRET_NAME
     }));
@@ -161,6 +171,13 @@ async function getVapiApiKey(userId: string): Promise<string | null> {
     return null;
   } catch (error) {
     console.error('Error getting VAPI API key:', error);
+    
+    // Still try environment variable if other methods fail
+    if (process.env.ADMIN_VAPI_API_KEY) {
+      console.log('Fallback: Using admin VAPI API key from environment variable');
+      return process.env.ADMIN_VAPI_API_KEY;
+    }
+    
     return null;
   }
 }

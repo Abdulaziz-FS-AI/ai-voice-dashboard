@@ -46,10 +46,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Determine if user is admin
   const isUserAdmin = propIsAdmin || isAuthorizedAdmin(user, userName);
 
-  // Load user's phone number on mount
+  // Load user's phone number and dashboard data on mount
   useEffect(() => {
     if (user?.userId) {
       loadUserPhoneNumber();
+      loadDashboardData();
     }
   }, [user]);
 
@@ -71,7 +72,23 @@ const Dashboard: React.FC<DashboardProps> = ({
     console.log('✅ Phone number created:', phoneNumber, phoneId);
   };
 
-  // Real data will come from API
+  const loadDashboardData = async () => {
+    try {
+      const response = await apiCall(API_CONFIG.ENDPOINTS.DASHBOARD_OVERVIEW);
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Update call logs if available in the response
+        if (data.recentActivity) {
+          setCallLogs(data.recentActivity);
+        }
+      }
+    } catch (error) {
+      console.log('Error loading dashboard data:', error);
+    }
+  };
+
+  // Call logs state
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
 
   const stats = {

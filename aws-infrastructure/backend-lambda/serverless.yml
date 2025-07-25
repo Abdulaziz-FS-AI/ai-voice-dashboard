@@ -16,6 +16,7 @@ provider:
     VAPI_CONFIG_TABLE: ${self:provider.stage}-voice-matrix-vapi-config
     VAPI_SECRET_NAME: voice-matrix/${self:provider.stage}/vapi-api-key
     JWT_SECRET: voice-matrix-super-secret-jwt-key-${self:provider.stage}
+    ADMIN_VAPI_API_KEY: ${env:VAPI_API_KEY, ''}
 # vpc:
   #   securityGroupIds:
   #     - ${cf:voice-matrix-${self:provider.stage}-infrastructure.LambdaSecurityGroupId}

@@ -1,73 +1,54 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getCurrentUser, signOut, AuthUser, fetchUserAttributes } from 'aws-amplify/auth';
-import { Hub } from 'aws-amplify/utils';
+import { authService, User } from '../services/authService';
 
 interface AuthContextType {
-  user: AuthUser | null;
+  user: User | null;
   userName: string | null;
   loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (userData: any) => Promise<void>;
+  adminLogin: (pin: string) => Promise<void>;
   logout: () => Promise<void>;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Clear any cached authentication data that might be using old client ID
+    // Clear any old Amplify authentication cache
     const clearOldAuthCache = () => {
       const keysToCheck = Object.keys(localStorage).filter(key => 
         key.includes('amplify') || key.includes('cognito') || key.includes('7645g8ltvu8mqc3sobft1ns2pa')
       );
       if (keysToCheck.length > 0) {
-        console.log('Clearing old authentication cache...');
-        localStorage.clear();
+        console.log('Clearing old Amplify authentication cache...');
+        keysToCheck.forEach(key => localStorage.removeItem(key));
         sessionStorage.clear();
       }
     };
     
     clearOldAuthCache();
     checkAuthState();
-    
-    // Listen for auth events
-    const authListener = Hub.listen('auth', ({ payload }) => {
-      switch (payload.event) {
-        case 'signedIn':
-          checkAuthState();
-          break;
-        case 'signedOut':
-          setUser(null);
-          setUserName(null);
-          break;
-        default:
-          break;
-      }
-    });
-
-    return () => authListener();
   }, []);
 
   const checkAuthState = async () => {
     try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      
-      // Fetch user attributes to get the name
-      try {
-        const attributes = await fetchUserAttributes();
-        const name = attributes.name || attributes.email?.split('@')[0] || currentUser.username;
-        setUserName(name);
-        console.log('📝 User attributes:', attributes);
-      } catch (attrError) {
-        console.log('⚠️ Could not fetch user attributes:', attrError);
-        // Fallback to username or email
-        const fallbackName = currentUser.signInDetails?.loginId?.split('@')[0] || currentUser.username;
-        setUserName(fallbackName);
+      const { valid, user: verifiedUser } = await authService.verifyToken();
+      if (valid && verifiedUser) {
+        setUser(verifiedUser);
+        setUserName(getUserDisplayName(verifiedUser));
+      } else {
+        setUser(null);
+        setUserName(null);
       }
     } catch (error) {
+      console.error('Auth state check failed:', error);
       setUser(null);
       setUserName(null);
     } finally {
@@ -75,9 +56,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const getUserDisplayName = (user: User): string => {
+    if (user.profile?.firstName && user.profile?.lastName) {
+      return `${user.profile.firstName} ${user.profile.lastName}`;
+    }
+    if (user.profile?.firstName) {
+      return user.profile.firstName;
+    }
+    return user.email.split('@')[0];
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await authService.login(email, password);
+      setUser(response.user);
+      setUserName(getUserDisplayName(response.user));
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const register = async (userData: any) => {
+    try {
+      const response = await authService.register(userData);
+      setUser(response.user);
+      setUserName(getUserDisplayName(response.user));
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const adminLogin = async (pin: string) => {
+    try {
+      const response = await authService.adminLogin(pin);
+      setUser(response.user);
+      setUserName(getUserDisplayName(response.user));
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
-      await signOut();
+      authService.logout();
       setUser(null);
       setUserName(null);
     } catch (error) {
@@ -86,7 +107,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, userName, loading, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      userName, 
+      loading, 
+      login,
+      register,
+      adminLogin,
+      logout,
+      isAuthenticated: !!user,
+      isAdmin: user?.role === 'admin'
+    }}>
       {children}
     </AuthContext.Provider>
   );

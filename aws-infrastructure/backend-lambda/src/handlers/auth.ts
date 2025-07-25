@@ -6,7 +6,11 @@ import * as jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.REGION });
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true
+  }
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'voice-matrix-secret-key';
 const USERS_TABLE = process.env.USERS_TABLE!;
@@ -112,7 +116,13 @@ async function handleLogin(event: APIGatewayProxyEvent): Promise<APIGatewayProxy
     }
 
     // Verify password
+    console.log('Password verification for user:', user.email);
+    console.log('Password provided:', password ? 'Yes' : 'No');
+    console.log('Hash exists:', user.passwordHash ? 'Yes' : 'No');
+    
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    console.log('Password valid:', isValidPassword);
+    
     if (!isValidPassword) {
       return {
         statusCode: 401,
@@ -214,9 +224,9 @@ async function handleRegister(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days trial
       },
       profile: {
-        firstName,
-        lastName,
-        company
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(company && { company })
       }
     };
 
@@ -252,10 +262,19 @@ async function handleRegister(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   } catch (error) {
     console.error('Registration error:', error);
+    console.error('Registration error stack:', error.stack);
+    console.error('Registration error details:', {
+      message: error.message,
+      code: error.code,
+      name: error.name
+    });
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ error: 'Registration failed' })
+      body: JSON.stringify({ 
+        error: 'Registration failed',
+        details: error.message // Include error details for debugging
+      })
     };
   }
 }
@@ -358,6 +377,8 @@ async function handleAdminLogin(event: APIGatewayProxyEvent): Promise<APIGateway
 
 async function getUserByEmail(email: string): Promise<User | null> {
   try {
+    console.log('Looking up user by email:', email);
+    
     // Use scan with filter for email lookup (in production, use GSI)
     const result = await docClient.send(new ScanCommand({
       TableName: USERS_TABLE,
@@ -368,7 +389,11 @@ async function getUserByEmail(email: string): Promise<User | null> {
       Limit: 1
     }));
 
-    return result.Items && result.Items.length > 0 ? result.Items[0] as User : null;
+    console.log('Scan result items:', result.Items?.length || 0);
+    const user = result.Items && result.Items.length > 0 ? result.Items[0] as User : null;
+    console.log('User found:', user ? 'Yes' : 'No');
+    
+    return user;
   } catch (error) {
     console.error('Error getting user by email:', error);
     return null;

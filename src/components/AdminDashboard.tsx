@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { apiCall, API_CONFIG } from '../config/api';
 import './AdminDashboard.css';
 
 interface User {
@@ -30,11 +31,48 @@ interface AdminDashboardProps {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogout, isCodeUnlocked = false }) => {
   const [currentView, setCurrentView] = useState<'overview' | 'users' | 'assistants' | 'analytics'>('overview');
-  const { userName, logout } = useAuth();
+  const { user, userName, logout } = useAuth();
+  const [loading, setLoading] = useState(true);
 
-  // Real data will come from API
+  // Data states
   const [users, setUsers] = useState<User[]>([]);
   const [assistants, setAssistants] = useState<Assistant[]>([]);
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      loadAdminData();
+    }
+  }, [user]);
+
+  const loadAdminData = async () => {
+    setLoading(true);
+    try {
+      // Load users
+      const usersResponse = await apiCall(API_CONFIG.ENDPOINTS.ADMIN_USERS);
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        setUsers(usersData);
+      }
+
+      // Load assistants
+      const assistantsResponse = await apiCall(API_CONFIG.ENDPOINTS.VAPI_ASSISTANTS);
+      if (assistantsResponse.ok) {
+        const assistantsData = await assistantsResponse.json();
+        setAssistants(assistantsData.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          description: a.firstMessage || 'AI Assistant',
+          icon: '🤖',
+          usageCount: 0,
+          isActive: true
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading admin data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const adminStats = {
     totalUsers: users.length,

@@ -5,7 +5,11 @@ import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.REGION });
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true
+  }
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'voice-matrix-secret-key';
 const USERS_TABLE = process.env.USERS_TABLE!;

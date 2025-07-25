@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './PinLogin.css';
 
 interface PinLoginProps {
@@ -7,19 +8,25 @@ interface PinLoginProps {
 }
 
 const PinLogin: React.FC<PinLoginProps> = ({ onLogin, onBack }) => {
+  const { adminLogin } = useAuth();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
-  const CORRECT_PIN = '123456';
+  const [loading, setLoading] = useState(false);
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin === CORRECT_PIN) {
+    setLoading(true);
+    setError('');
+    
+    try {
+      await adminLogin(pin);
       onLogin();
-    } else {
-      setError('Invalid PIN. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Invalid PIN. Please try again.');
       setPin('');
     }
+    setLoading(false);
   };
 
   const handleKeyPress = (digit: string) => {
@@ -109,9 +116,9 @@ const PinLogin: React.FC<PinLoginProps> = ({ onLogin, onBack }) => {
           <button
             type="submit"
             className="login-button"
-            disabled={pin.length !== 6}
+            disabled={pin.length !== 6 || loading}
           >
-            Login
+            {loading ? 'Signing in...' : 'Login'}
           </button>
         </form>
       </div>
