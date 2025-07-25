@@ -8,10 +8,8 @@ import VoiceAgentEditor from './components/VoiceAgentEditor';
 import DiagnosticPage from './components/DiagnosticPage';
 import AdminDashboard from './components/AdminDashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext';
 import { isAuthorizedAdmin, validateAdminAccessCode } from './utils/adminConfig';
 import '@aws-amplify/ui-react/styles.css';
-import './styles/theme.css';
 import './App.css';
 
 type Page = 'landing' | 'login' | 'phone-setup' | 'assistant-selection' | 'dashboard' | 'editor' | 'diagnostic' | 'admin';
@@ -227,13 +225,11 @@ const AppContent: React.FC = () => {
 
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <div className="App theme-bg-primary">
-          <AppContent />
-        </div>
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <div className="App">
+        <AppContent />
+      </div>
+    </AuthProvider>
   );
 }
 
