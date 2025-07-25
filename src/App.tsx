@@ -8,6 +8,7 @@ import VoiceAgentEditor from './components/VoiceAgentEditor';
 import DiagnosticPage from './components/DiagnosticPage';
 import AdminDashboard from './components/AdminDashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { isAuthorizedAdmin, validateAdminAccessCode } from './utils/adminConfig';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 
@@ -24,17 +25,30 @@ const AppContent: React.FC = () => {
   const [, setSelectedAssistant] = useState<any>(null);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   
+  // Admin access state
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminAccessCode, setAdminAccessCode] = useState('');
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  
   const { user, userName, loading } = useAuth();
 
-  // Check if user is admin
-  const isAdmin = userName === 'admin' || user?.username === 'admin';
+  // Check if user is authorized admin
+  const isAuthorizedAdminUser = isAuthorizedAdmin(user, userName);
+  const isAdmin = isAuthorizedAdminUser || isAdminUnlocked;
 
-  // Secret diagnostic access
+  // Secret access shortcuts
   React.useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
+      // Diagnostic access
       if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         console.log('🔍 Opening diagnostic page...');
         setCurrentPage('diagnostic');
+      }
+      
+      // Admin access shortcut
+      if (event.ctrlKey && event.shiftKey && event.key === 'A') {
+        console.log('👑 Admin access requested...');
+        setShowAdminLogin(true);
       }
     };
 
@@ -53,6 +67,24 @@ const AppContent: React.FC = () => {
   // Start assistant setup flow from dashboard
   const handleStartAssistantSetup = () => {
     setCurrentPage('phone-setup');
+  };
+
+  // Admin access handlers
+  const handleAdminCodeSubmit = () => {
+    if (validateAdminAccessCode(adminAccessCode)) {
+      setIsAdminUnlocked(true);
+      setShowAdminLogin(false);
+      setAdminAccessCode('');
+      console.log('✅ Admin access granted');
+    } else {
+      alert('Invalid admin access code');
+      setAdminAccessCode('');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminUnlocked(false);
+    setCurrentPage('dashboard');
   };
 
   const handleTestLogin = () => {
@@ -138,7 +170,7 @@ const AppContent: React.FC = () => {
           setCurrentPage('dashboard');
           return null;
         }
-        return <AdminDashboard onNavigate={handleNavigate} />;
+        return <AdminDashboard onNavigate={handleNavigate} onAdminLogout={handleAdminLogout} isCodeUnlocked={isAdminUnlocked} />;
       case 'diagnostic':
         return <DiagnosticPage />;
       case 'landing':
@@ -148,6 +180,42 @@ const AppContent: React.FC = () => {
       default:
         return <Dashboard onNavigate={handleNavigate} onStartAssistantSetup={handleStartAssistantSetup} hasCompletedSetup={hasCompletedSetup} userPhone={userPhone} isAdmin={isAdmin} testMode={testMode} />;
     }
+  }
+
+  // Admin access modal
+  if (showAdminLogin) {
+    return (
+      <div className="admin-login-overlay">
+        <div className="admin-login-modal">
+          <div className="admin-login-header">
+            <h3>👑 Admin Access</h3>
+            <button className="close-btn" onClick={() => setShowAdminLogin(false)}>×</button>
+          </div>
+          <div className="admin-login-content">
+            <p>Enter the admin access code to unlock admin privileges:</p>
+            <input
+              type="password"
+              value={adminAccessCode}
+              onChange={(e) => setAdminAccessCode(e.target.value)}
+              placeholder="Admin Access Code"
+              onKeyPress={(e) => e.key === 'Enter' && handleAdminCodeSubmit()}
+              autoFocus
+            />
+            <div className="admin-login-actions">
+              <button onClick={() => setShowAdminLogin(false)}>Cancel</button>
+              <button onClick={handleAdminCodeSubmit} disabled={!adminAccessCode}>
+                Unlock Admin
+              </button>
+            </div>
+            {isAuthorizedAdminUser && (
+              <div className="authorized-admin-notice">
+                ✅ You are already an authorized admin user
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Show landing page with Cognito auth for unauthenticated users

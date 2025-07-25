@@ -24,9 +24,11 @@ interface Assistant {
 
 interface AdminDashboardProps {
   onNavigate: (page: 'dashboard' | 'editor' | 'admin') => void;
+  onAdminLogout?: () => void;
+  isCodeUnlocked?: boolean;
 }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onAdminLogout, isCodeUnlocked = false }) => {
   const [currentView, setCurrentView] = useState<'overview' | 'users' | 'assistants' | 'analytics'>('overview');
   const { userName, logout } = useAuth();
 
@@ -304,10 +306,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
             ← Back to Dashboard
           </button>
           <div className="admin-user-section">
-            <span className="admin-user-name">Admin: {userName}</span>
-            <button className="logout-button" onClick={logout}>
-              Logout
-            </button>
+            <span className="admin-user-name">
+              Admin: {userName}
+              {isCodeUnlocked && <span className="code-access-badge">Code Access</span>}
+            </span>
+            <div className="admin-logout-buttons">
+              {isCodeUnlocked && onAdminLogout && (
+                <button className="admin-logout-button" onClick={onAdminLogout}>
+                  Exit Admin
+                </button>
+              )}
+              <button className="logout-button" onClick={logout}>
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </div>
