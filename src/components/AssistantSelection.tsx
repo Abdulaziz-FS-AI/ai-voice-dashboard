@@ -15,10 +15,11 @@ interface AssistantType {
 interface AssistantSelectionProps {
   onNext: (assistant: AssistantType) => void;
   onBack: () => void;
+  userPhone?: string;
   testMode?: boolean;
 }
 
-const AssistantSelection: React.FC<AssistantSelectionProps> = ({ onNext, onBack, testMode = false }) => {
+const AssistantSelection: React.FC<AssistantSelectionProps> = ({ onNext, onBack, userPhone, testMode = false }) => {
   const [selectedAssistant, setSelectedAssistant] = useState<AssistantType | null>(null);
 
   const assistants: AssistantType[] = [

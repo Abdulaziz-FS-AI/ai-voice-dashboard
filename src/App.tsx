@@ -6,24 +6,28 @@ import AssistantSelection from './components/AssistantSelection';
 import Dashboard from './components/Dashboard';
 import VoiceAgentEditor from './components/VoiceAgentEditor';
 import DiagnosticPage from './components/DiagnosticPage';
+import AdminDashboard from './components/AdminDashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 
-type Page = 'landing' | 'login' | 'phone-setup' | 'assistant-selection' | 'dashboard' | 'editor' | 'diagnostic';
+type Page = 'landing' | 'login' | 'phone-setup' | 'assistant-selection' | 'dashboard' | 'editor' | 'diagnostic' | 'admin';
 
 const AppContent: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+  const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [, setAgentConfig] = useState<any>(null);
   const [showTestLogin, setShowTestLogin] = useState(false);
   const [testMode, setTestMode] = useState(false);
   
-  // Onboarding state
+  // Assistant setup state (not automatic onboarding)
   const [userPhone, setUserPhone] = useState<string>('');
   const [, setSelectedAssistant] = useState<any>(null);
-  const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
+  const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   
-  const { user, loading } = useAuth();
+  const { user, userName, loading } = useAuth();
+
+  // Check if user is admin
+  const isAdmin = userName === 'admin' || user?.username === 'admin';
 
   // Secret diagnostic access
   React.useEffect(() => {
@@ -38,12 +42,17 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  const handleNavigate = (page: 'dashboard' | 'editor' | 'diagnostic') => {
+  const handleNavigate = (page: 'dashboard' | 'editor' | 'diagnostic' | 'admin' | 'phone-setup' | 'assistant-selection') => {
     setCurrentPage(page);
   };
 
   const handleGetStarted = () => {
     // This will be handled by Authenticator component
+  };
+
+  // Start assistant setup flow from dashboard
+  const handleStartAssistantSetup = () => {
+    setCurrentPage('phone-setup');
   };
 
   const handleTestLogin = () => {
@@ -69,7 +78,7 @@ const AppContent: React.FC = () => {
 
   const handleAssistantSelection = (assistant: any) => {
     setSelectedAssistant(assistant);
-    setIsOnboardingComplete(true);
+    setHasCompletedSetup(true);
     setCurrentPage('dashboard');
   };
 
@@ -77,8 +86,16 @@ const AppContent: React.FC = () => {
     setCurrentPage('phone-setup');
   };
 
-  // Check if user needs onboarding
-  const needsOnboarding = (user || testMode) && !isOnboardingComplete && !userPhone;
+  const handleBackToDashboard = () => {
+    setCurrentPage('dashboard');
+  };
+
+  // After authentication, navigate to dashboard
+  React.useEffect(() => {
+    if (user && currentPage === 'landing') {
+      setCurrentPage('dashboard');
+    }
+  }, [user, currentPage]);
 
   if (loading) {
     return <div className="loading">Loading...</div>;
@@ -91,30 +108,45 @@ const AppContent: React.FC = () => {
 
   // Show authenticated content if user is logged in OR in test mode
   if (user || testMode) {
-    // Handle onboarding flow
-    if (needsOnboarding) {
-      return <PhoneSetup onNext={handlePhoneSetup} testMode={testMode} />;
-    }
-
     switch (currentPage) {
       case 'phone-setup':
-        return <PhoneSetup onNext={handlePhoneSetup} testMode={testMode} />;
+        return <PhoneSetup onNext={handlePhoneSetup} onBack={handleBackToDashboard} testMode={testMode} />;
       case 'assistant-selection':
         return (
           <AssistantSelection 
             onNext={handleAssistantSelection} 
             onBack={handleBackToPhoneSetup}
+            userPhone={userPhone}
             testMode={testMode} 
           />
         );
       case 'dashboard':
-        return <Dashboard onNavigate={handleNavigate} testMode={testMode} />;
+        return (
+          <Dashboard 
+            onNavigate={handleNavigate} 
+            onStartAssistantSetup={handleStartAssistantSetup}
+            hasCompletedSetup={hasCompletedSetup}
+            userPhone={userPhone}
+            isAdmin={isAdmin}
+            testMode={testMode} 
+          />
+        );
       case 'editor':
         return <VoiceAgentEditor onSave={handleSaveConfig} onNavigate={handleNavigate} testMode={testMode} />;
+      case 'admin':
+        if (!isAdmin) {
+          setCurrentPage('dashboard');
+          return null;
+        }
+        return <AdminDashboard onNavigate={handleNavigate} />;
       case 'diagnostic':
         return <DiagnosticPage />;
+      case 'landing':
+        // If authenticated user somehow gets to landing, redirect to dashboard
+        setCurrentPage('dashboard');
+        return null;
       default:
-        return <Dashboard onNavigate={handleNavigate} testMode={testMode} />;
+        return <Dashboard onNavigate={handleNavigate} onStartAssistantSetup={handleStartAssistantSetup} hasCompletedSetup={hasCompletedSetup} userPhone={userPhone} isAdmin={isAdmin} testMode={testMode} />;
     }
   }
 

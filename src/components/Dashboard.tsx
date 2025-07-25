@@ -16,11 +16,22 @@ interface CallLog {
 }
 
 interface DashboardProps {
-  onNavigate: (page: 'dashboard' | 'editor') => void;
+  onNavigate: (page: 'dashboard' | 'editor' | 'admin') => void;
+  onStartAssistantSetup?: () => void;
+  hasCompletedSetup?: boolean;
+  userPhone?: string;
+  isAdmin?: boolean;
   testMode?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onNavigate, testMode = false }) => {
+const Dashboard: React.FC<DashboardProps> = ({ 
+  onNavigate, 
+  onStartAssistantSetup,
+  hasCompletedSetup = false,
+  userPhone = '',
+  isAdmin = false,
+  testMode = false 
+}) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'vapi-settings'>('dashboard');
@@ -142,15 +153,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, testMode = false }) =
             <option value="week">This Week</option>
             <option value="month">This Month</option>
           </select>
-          <button className="config-button" onClick={() => onNavigate('editor')}>
-            Configure AI Agent
-          </button>
-          <button className="settings-button" onClick={() => setCurrentView('vapi-settings')}>
-            VAPI Settings
-          </button>
+          
+          {!hasCompletedSetup && onStartAssistantSetup && (
+            <button className="get-started-button" onClick={onStartAssistantSetup}>
+              🚀 Get Started with Assistant
+            </button>
+          )}
+          
+          {hasCompletedSetup && (
+            <>
+              <button className="config-button" onClick={() => onNavigate('editor')}>
+                Configure AI Agent
+              </button>
+              <button className="settings-button" onClick={() => setCurrentView('vapi-settings')}>
+                VAPI Settings
+              </button>
+            </>
+          )}
+          
+          {isAdmin && (
+            <button className="admin-button" onClick={() => onNavigate('admin')}>
+              👑 Admin Panel
+            </button>
+          )}
+          
           {user && (
             <div className="user-section">
-              <span className="user-name">Welcome, {userName || 'User'}</span>
+              <span className="user-name">Welcome, {userName || 'User'}{isAdmin && ' (Admin)'}</span>
               <button className="logout-button" onClick={logout}>
                 Logout
               </button>

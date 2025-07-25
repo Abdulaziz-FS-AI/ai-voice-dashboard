@@ -3,10 +3,11 @@ import './PhoneSetup.css';
 
 interface PhoneSetupProps {
   onNext: (phoneNumber: string) => void;
+  onBack?: () => void;
   testMode?: boolean;
 }
 
-const PhoneSetup: React.FC<PhoneSetupProps> = ({ onNext, testMode = false }) => {
+const PhoneSetup: React.FC<PhoneSetupProps> = ({ onNext, onBack, testMode = false }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -105,23 +106,34 @@ const PhoneSetup: React.FC<PhoneSetupProps> = ({ onNext, testMode = false }) => 
             </div>
           </div>
 
-          <button 
-            type="submit" 
-            className="setup-button"
-            disabled={loading || !validatePhoneNumber(phoneNumber)}
-          >
-            {loading ? (
-              <>
-                <span className="spinner"></span>
-                Saving...
-              </>
-            ) : (
-              <>
-                Continue
-                <span className="button-arrow">→</span>
-              </>
+          <div className="form-actions">
+            {onBack && (
+              <button 
+                type="button" 
+                className="back-button"
+                onClick={onBack}
+              >
+                ← Back to Dashboard
+              </button>
             )}
-          </button>
+            <button 
+              type="submit" 
+              className="setup-button"
+              disabled={loading || !validatePhoneNumber(phoneNumber)}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner"></span>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Continue
+                  <span className="button-arrow">→</span>
+                </>
+              )}
+            </button>
+          </div>
         </form>
 
         {testMode && (
