@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createVapiClient, validateVapiApiKey, assistantTemplates, VapiAssistant } from '../utils/vapiConfig';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import ThemeToggle from './ThemeToggle';
 import './VapiSettings.css';
 
 interface VapiSettingsProps {
@@ -14,7 +12,6 @@ interface VapiSettingsProps {
 
 const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, isAdmin = false }) => {
   const { user } = useAuth();
-  const { } = useTheme();
   const [apiKey, setApiKey] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [isValid, setIsValid] = useState<boolean | null>(null);
@@ -297,10 +294,9 @@ const VapiSettings: React.FC<VapiSettingsProps> = ({ onBack, testMode = false, i
   };
 
   return (
-    <div className="vapi-settings-container theme-bg-primary">
-      <div className="vapi-settings-header theme-bg-card">
-        <ThemeToggle className="vapi-theme-toggle" />
-        <button className="back-btn theme-button-secondary" onClick={onBack}>← Back</button>
+    <div className="vapi-settings-container">
+      <div className="vapi-settings-header">
+        <button className="back-btn" onClick={onBack}>← Back</button>
         <div className="header-title">
           <h2>🎯 VAPI Integration Settings</h2>
           <p>Connect your VAPI account to manage AI voice assistants</p>

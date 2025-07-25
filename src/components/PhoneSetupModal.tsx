@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useTheme } from '../contexts/ThemeContext';
 import { apiCall, API_CONFIG } from '../config/api';
 import './PhoneSetupModal.css';
 
@@ -23,7 +22,6 @@ const PhoneSetupModal: React.FC<PhoneSetupModalProps> = ({
   onPhoneCreated,
   customerId
 }) => {
-  const { isDark } = useTheme();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [provider, setProvider] = useState<'twilio' | 'vapi'>('twilio');
   const [loading, setLoading] = useState(false);
@@ -123,15 +121,15 @@ const PhoneSetupModal: React.FC<PhoneSetupModalProps> = ({
   return (
     <div className="modal-overlay" onClick={handleClose}>
       <div 
-        className={`modal-content ${isDark ? 'theme-bg-secondary' : 'theme-bg-primary'}`}
+        className="modal-content"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 className="theme-text-primary">
+          <h2>
             {step === 'success' ? '🎉 Phone Number Created!' : '📱 Get Your Phone Number'}
           </h2>
           <button 
-            className="modal-close theme-text-secondary"
+            className="modal-close"
             onClick={handleClose}
           >
             ✕

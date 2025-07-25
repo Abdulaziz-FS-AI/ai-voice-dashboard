@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import CustomAuth from './CustomAuth';
-import ThemeToggle from './ThemeToggle';
 import './LandingPage.css';
 
 interface LandingPageProps {
@@ -41,7 +40,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
             <a href="#features" className="nav-link">Features</a>
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
-            <ThemeToggle className="nav-theme-toggle" />
             <button className="nav-test" onClick={onTestLogin}>🎯 Demo (PIN: 123456)</button>
             <button className="nav-cta" onClick={handleGetStarted}>Get Started</button>
           </div>

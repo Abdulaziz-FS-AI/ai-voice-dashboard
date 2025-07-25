@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import ThemeToggle from './ThemeToggle';
 import './VoiceAgentEditor.css';
 
 interface VapiAssistant {
@@ -50,7 +48,6 @@ interface VoiceAgentEditorProps {
 
 const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate, testMode = false }) => {
   const { user } = useAuth();
-  const { } = useTheme();
   const [assistants, setAssistants] = useState<VapiAssistant[]>([]);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -383,12 +380,11 @@ const VoiceAgentEditor: React.FC<VoiceAgentEditorProps> = ({ onSave, onNavigate,
           </div>
         </div>
         <div className="header-buttons">
-          <ThemeToggle className="editor-theme-toggle" />
-          <button className="nav-button theme-button-secondary" onClick={() => onNavigate('dashboard')}>
+          <button className="nav-button" onClick={() => onNavigate('dashboard')}>
             Dashboard
           </button>
           <button 
-            className="save-button theme-button" 
+            className="save-button" 
             onClick={handleSave}
             disabled={saving || !selectedAssistant}
           >
