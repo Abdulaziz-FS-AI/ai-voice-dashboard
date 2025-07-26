@@ -19,7 +19,7 @@
 .auth-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 20px;
+  padding: 20px 20px 30px 20px;
   text-align: center;
   position: relative;
 }
@@ -34,8 +34,10 @@
   padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: background 0.2s;
+  backdrop-filter: blur(10px);
+  z-index: 1;
 }
 
 .back-button:hover {
@@ -47,7 +49,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: 20px;
+  margin-top: 10px;
+  padding-top: 5px;
 }
 
 .logo-icon {

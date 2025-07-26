@@ -5,8 +5,8 @@ frameworkVersion: '3'
 provider:
   name: aws
   runtime: nodejs18.x
-  region: ${opt:region, 'us-east-1'}
-  stage: ${opt:stage, 'production'}
+  region: ${opt:region, 'eu-north-1'}
+  stage: ${opt:stage, 'prod'}
   memorySize: 256
   timeout: 30
   environment:
@@ -14,6 +14,11 @@ provider:
     REGION: ${self:provider.region}
     USERS_TABLE: ${self:provider.stage}-voice-matrix-users
     VAPI_CONFIG_TABLE: ${self:provider.stage}-voice-matrix-vapi-config
+    ASSISTANTS_TABLE: ${self:provider.stage}-voice-matrix-assistants
+    PROMPT_TEMPLATES_TABLE: ${self:provider.stage}-voice-matrix-prompt-templates
+    CALL_LOGS_TABLE: ${self:provider.stage}-voice-matrix-call-logs
+    PHONE_NUMBERS_TABLE: ${self:provider.stage}-voice-matrix-phone-numbers
+    USER_SETTINGS_TABLE: ${self:provider.stage}-voice-matrix-user-settings
     VAPI_SECRET_NAME: voice-matrix/${self:provider.stage}/vapi-api-key
     JWT_SECRET: voice-matrix-super-secret-jwt-key-${self:provider.stage}
     ADMIN_VAPI_API_KEY: ${env:VAPI_API_KEY, ''}
@@ -38,7 +43,15 @@ provider:
           Resource:
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.VAPI_CONFIG_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.ASSISTANTS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.PROMPT_TEMPLATES_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CALL_LOGS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.PHONE_NUMBERS_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USER_SETTINGS_TABLE}
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.ASSISTANTS_TABLE}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CALL_LOGS_TABLE}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.PHONE_NUMBERS_TABLE}/index/*
         - Effect: Allow
           Action:
             - secretsmanager:GetSecretValue
@@ -143,6 +156,78 @@ functions:
             allowCredentials: false
       - http:
           path: /dashboard
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # Assistants Management
+  assistants:
+    handler: src/handlers/assistants.handler
+    events:
+      - http:
+          path: /assistants/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # Analytics
+  analytics:
+    handler: src/handlers/analytics.handler
+    events:
+      - http:
+          path: /analytics/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # Phone Numbers Management
+  phoneNumbers:
+    handler: src/handlers/phone-numbers.handler
+    events:
+      - http:
+          path: /phone-numbers/{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+  # Settings
+  settings:
+    handler: src/handlers/settings.handler
+    events:
+      - http:
+          path: /settings/{proxy+}
           method: ANY
           cors:
             origin: '*'

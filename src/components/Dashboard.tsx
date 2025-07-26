@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -40,6 +41,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, token, onLogout }) => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://your-api-gateway-url.com';
 
@@ -188,28 +190,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, token, onLogout }) => {
           <section className="actions-section">
             <h2>Quick Actions</h2>
             <div className="actions-grid">
-              <button className="action-card">
+              <button className="action-card" onClick={() => navigate('/create-assistant')}>
                 <div className="action-icon">🤖</div>
                 <div className="action-content">
                   <h3>Create Assistant</h3>
                   <p>Build a new AI voice assistant</p>
                 </div>
               </button>
-              <button className="action-card">
+              <button className="action-card" onClick={() => navigate('/analytics')}>
                 <div className="action-icon">📊</div>
                 <div className="action-content">
                   <h3>View Analytics</h3>
                   <p>Analyze call performance</p>
                 </div>
               </button>
-              <button className="action-card">
+              <button className="action-card" onClick={() => navigate('/phone-numbers')}>
                 <div className="action-icon">📞</div>
                 <div className="action-content">
                   <h3>Manage Numbers</h3>
                   <p>Configure phone numbers</p>
                 </div>
               </button>
-              <button className="action-card">
+              <button className="action-card" onClick={() => navigate('/settings')}>
                 <div className="action-icon">⚙️</div>
                 <div className="action-content">
                   <h3>Settings</h3>
