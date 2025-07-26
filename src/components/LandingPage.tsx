@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import CustomAuth from './CustomAuth';
+import React from 'react';
 import './LandingPage.css';
 
 interface LandingPageProps {
@@ -8,24 +7,6 @@ interface LandingPageProps {
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) => {
-  const [showAuth, setShowAuth] = useState(false);
-
-  const handleGetStarted = () => {
-    setShowAuth(true);
-  };
-
-  if (showAuth) {
-    return (
-      <CustomAuth 
-        onSuccess={() => {
-          // This will trigger a re-render in the parent App component
-          // since the user context will be updated
-          setShowAuth(false);
-        }}
-        onBack={() => setShowAuth(false)}
-      />
-    );
-  }
 
   return (
     <div className="landing-page">
@@ -41,7 +22,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
             <a href="#about" className="nav-link">About</a>
             <a href="#contact" className="nav-link">Contact</a>
             <button className="nav-test" onClick={onTestLogin}>🎯 Demo (PIN: 123456)</button>
-            <button className="nav-cta" onClick={handleGetStarted}>Get Started</button>
+            <button className="nav-cta" onClick={onGetStarted}>Get Started</button>
           </div>
         </div>
       </nav>
@@ -61,7 +42,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
             </p>
             <div className="hero-actions">
               <div className="primary-action">
-                <button className="cta-primary" onClick={handleGetStarted}>
+                <button className="cta-primary" onClick={onGetStarted}>
                   Start 14-Day Free Trial
                   <span className="cta-arrow">→</span>
                 </button>
@@ -366,7 +347,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
               Join thousands of companies already using Voice Matrix to deliver exceptional customer experiences.
             </p>
             <div className="cta-actions">
-              <button className="cta-primary large" onClick={handleGetStarted}>
+              <button className="cta-primary large" onClick={onGetStarted}>
                 Start Your Free Trial
                 <span className="cta-arrow">→</span>
               </button>
