@@ -64,11 +64,11 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess, onBack }) => {
 
   return (
     <div className="auth-container">
+      <button className="back-button" onClick={onBack}>
+        ← Back to Landing
+      </button>
       <div className="auth-card">
         <div className="auth-header">
-          <button className="back-button" onClick={onBack}>
-            ← Back to Landing
-          </button>
           <div className="auth-logo">
             <div className="logo-icon">🎙️</div>
             <span className="logo-text">Voice Matrix</span>

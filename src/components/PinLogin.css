@@ -1,10 +1,12 @@
 .pin-container {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   padding: 20px;
+  gap: 16px;
 }
 
 .pin-card {
@@ -16,18 +18,7 @@
   overflow: hidden;
 }
 
-.pin-header {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
-  padding: 20px 20px 30px 20px;
-  text-align: center;
-  position: relative;
-}
-
 .back-button {
-  position: absolute;
-  left: 20px;
-  top: 20px;
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
@@ -37,11 +28,18 @@
   font-size: 13px;
   transition: background 0.2s;
   backdrop-filter: blur(10px);
-  z-index: 1;
+  align-self: flex-start;
 }
 
 .back-button:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.pin-header {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  padding: 20px 20px 30px 20px;
+  text-align: center;
 }
 
 .pin-logo {
@@ -49,8 +47,6 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: 10px;
-  padding-top: 5px;
 }
 
 .logo-icon {

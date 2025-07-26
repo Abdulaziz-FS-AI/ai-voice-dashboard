@@ -50,11 +50,11 @@ const PinLogin: React.FC<PinLoginProps> = ({ onPinSuccess, onBack }) => {
 
   return (
     <div className="pin-container">
+      <button className="back-button" onClick={onBack}>
+        ← Back to Landing
+      </button>
       <div className="pin-card">
         <div className="pin-header">
-          <button className="back-button" onClick={onBack}>
-            ← Back to Landing
-          </button>
           <div className="pin-logo">
             <div className="logo-icon">🎯</div>
             <span className="logo-text">Demo Access</span>
