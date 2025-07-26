@@ -74,7 +74,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const loadDashboardData = async () => {
     try {
-      const response = await apiCall(API_CONFIG.ENDPOINTS.DASHBOARD_OVERVIEW);
+      const response = await apiCall(API_CONFIG.ENDPOINTS.DASHBOARD);
       
       if (response.ok) {
         const data = await response.json();

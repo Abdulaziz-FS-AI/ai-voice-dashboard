@@ -185,6 +185,8 @@
   border-radius: 6px;
   font-size: 14px;
   transition: border-color 0.2s;
+  background-color: white;
+  color: #333;
 }
 
 .form-group input:focus,
@@ -204,6 +206,12 @@
 
 .question-group input {
   flex: 1;
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  background-color: white;
+  color: #333;
 }
 
 .remove-question {
