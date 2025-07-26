@@ -505,6 +505,7 @@ async function handleDeployAssistant(event: APIGatewayProxyEvent, userId: string
 
   try {
     const { assistantId } = JSON.parse(event.body);
+    console.log('Deploying assistant:', assistantId, 'for user:', userId);
 
     // Get assistant from database
     const result = await docClient.send(new GetCommand({
@@ -514,6 +515,7 @@ async function handleDeployAssistant(event: APIGatewayProxyEvent, userId: string
 
     const assistant = result.Item as AssistantConfig;
     if (!assistant || assistant.userId !== userId) {
+      console.error('Assistant not found or unauthorized:', { assistantId, userId, found: !!assistant });
       return {
         statusCode: 404,
         headers: corsHeaders,
@@ -521,11 +523,31 @@ async function handleDeployAssistant(event: APIGatewayProxyEvent, userId: string
       };
     }
 
+    console.log('Found assistant for deployment:', {
+      id: assistant.id,
+      name: assistant.name,
+      status: assistant.status
+    });
+
     // Get VAPI API key
     const vapiApiKey = await getVapiApiKey();
+    if (!vapiApiKey) {
+      console.error('No VAPI API key available');
+      return {
+        statusCode: 500,
+        headers: corsHeaders,
+        body: JSON.stringify({ 
+          error: 'VAPI API key not configured',
+          details: 'Please configure VAPI API key in environment variables or AWS Secrets Manager'
+        })
+      };
+    }
+
+    console.log('VAPI API key retrieved, length:', vapiApiKey.length);
 
     // Create assistant in VAPI
     const vapiResponse = await createVapiAssistant(assistant, vapiApiKey);
+    console.log('VAPI assistant created successfully:', vapiResponse.id);
 
     // Update assistant with VAPI details
     await docClient.send(new UpdateCommand({
@@ -537,7 +559,7 @@ async function handleDeployAssistant(event: APIGatewayProxyEvent, userId: string
       },
       ExpressionAttributeValues: {
         ':vapiId': vapiResponse.id,
-        ':phone': vapiResponse.phoneNumber,
+        ':phone': vapiResponse.phoneNumber || 'pending',
         ':status': 'active',
         ':updatedAt': new Date().toISOString()
       }
@@ -550,14 +572,28 @@ async function handleDeployAssistant(event: APIGatewayProxyEvent, userId: string
         assistant: {
           ...assistant,
           vapiAssistantId: vapiResponse.id,
-          phoneNumber: vapiResponse.phoneNumber,
+          phoneNumber: vapiResponse.phoneNumber || 'pending',
           status: 'active'
         },
-        message: 'Assistant deployed successfully'
+        message: 'Assistant deployed successfully to VAPI'
       })
     };
   } catch (error) {
     console.error('Error deploying assistant:', error);
+    
+    // Check if it's a VAPI-specific error
+    if (error.message?.includes('VAPI')) {
+      return {
+        statusCode: 500,
+        headers: corsHeaders,
+        body: JSON.stringify({ 
+          error: 'VAPI deployment failed',
+          details: error.message,
+          suggestion: 'Please check your VAPI API key and try again'
+        })
+      };
+    }
+    
     return {
       statusCode: 500,
       headers: corsHeaders,
@@ -676,6 +712,13 @@ async function getVapiApiKey(): Promise<string> {
 }
 
 async function createVapiAssistant(assistant: AssistantConfig, apiKey: string) {
+  console.log('Creating VAPI assistant with config:', {
+    name: assistant.name,
+    apiKeyPresent: !!apiKey,
+    voiceSettings: assistant.voiceSettings
+  });
+
+  // Fixed VAPI configuration according to their API spec
   const vapiConfig = {
     name: assistant.name,
     model: {
@@ -686,28 +729,61 @@ async function createVapiAssistant(assistant: AssistantConfig, apiKey: string) {
           role: 'system',
           content: assistant.assembledPrompt
         }
-      ]
+      ],
+      maxTokens: 250,
+      temperature: 0.7
     },
     voice: {
-      provider: assistant.voiceSettings.provider,
-      voiceId: assistant.voiceSettings.voiceId,
-      speed: assistant.voiceSettings.speed,
-      stability: assistant.voiceSettings.stability
+      provider: 'elevenlabs', // Force ElevenLabs for now
+      voiceId: assistant.voiceSettings.voiceId || 'ErXwobaYiN019PkySvjV', // Rachel voice as fallback
+      model: 'eleven_turbo_v2',
+      stability: assistant.voiceSettings.stability || 0.5,
+      similarityBoost: 0.75,
+      style: 0.0,
+      useSpeakerBoost: true
     },
     firstMessage: 'Hello! How can I help you today?',
     endCallMessage: 'Thank you for calling. Have a great day!',
     recordingEnabled: true,
-    maxDurationSeconds: 600 // 10 minutes max
+    maxDurationSeconds: 600,
+    silenceTimeoutSeconds: 30,
+    responseDelaySeconds: 0.4,
+    numWordsToInterruptAssistant: 2
   };
 
-  const response = await axios.post('https://api.vapi.ai/assistant', vapiConfig, {
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  console.log('Sending request to VAPI with config:', JSON.stringify(vapiConfig, null, 2));
 
-  return response.data;
+  try {
+    const response = await axios.post('https://api.vapi.ai/assistant', vapiConfig, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000 // 30 second timeout
+    });
+
+    console.log('VAPI response received:', response.status, response.data);
+    return response.data;
+  } catch (error) {
+    console.error('VAPI API Error Details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      headers: error.response?.headers,
+      message: error.message
+    });
+    
+    // More detailed error handling
+    if (error.response?.status === 401) {
+      throw new Error('VAPI API authentication failed. Please check your API key.');
+    } else if (error.response?.status === 400) {
+      throw new Error(`VAPI API request error: ${JSON.stringify(error.response.data)}`);
+    } else if (error.response?.status === 429) {
+      throw new Error('VAPI API rate limit exceeded. Please try again later.');
+    } else {
+      throw new Error(`VAPI API error: ${error.message}`);
+    }
+  }
 }
 
 async function handleUpdateAssistant(event: APIGatewayProxyEvent, userId: string): Promise<APIGatewayProxyResult> {
