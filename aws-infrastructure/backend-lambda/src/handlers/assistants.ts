@@ -5,6 +5,14 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import * as jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
+import { 
+  EnhancedPromptTemplate, 
+  TemplateCreationRequest,
+  TemplateSearchFilters 
+} from '../types/enhanced-templates';
+import { createTemplateManagementService } from '../services/template-management';
+import { STRATEGIC_TEMPLATES } from '../templates/strategic-templates';
+import { STRATEGIC_TEMPLATES_CONTINUED } from '../templates/strategic-templates-continued';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient, {
@@ -18,8 +26,16 @@ const secretsClient = new SecretsManagerClient({ region: process.env.REGION });
 const JWT_SECRET = process.env.JWT_SECRET || 'voice-matrix-secret-key';
 const USERS_TABLE = process.env.USERS_TABLE!;
 const ASSISTANTS_TABLE = process.env.ASSISTANTS_TABLE!;
-const PROMPT_TEMPLATES_TABLE = process.env.PROMPT_TEMPLATES_TABLE!;
+const PROMPT_TEMPLATES_TABLE = process.env.PROMPT_TEMPLATES_TABLE || 'VoiceMatrix-PromptTemplates';
+const TEMPLATE_ANALYTICS_TABLE = process.env.TEMPLATE_ANALYTICS_TABLE || 'VoiceMatrix-TemplateAnalytics';
 const VAPI_SECRET_NAME = process.env.VAPI_SECRET_NAME!;
+
+// Initialize template management service
+const templateService = createTemplateManagementService(
+  docClient,
+  PROMPT_TEMPLATES_TABLE,
+  TEMPLATE_ANALYTICS_TABLE
+);
 
 interface PromptSegment {
   id: string;
@@ -99,6 +115,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     switch (`${method}:${path}`) {
       case 'GET:templates':
         return await handleGetPromptTemplates();
+      case 'POST:templates/search':
+        return await handleSearchTemplates(event);
+      case 'GET:templates/popular':
+        return await handleGetPopularTemplates();
+      case 'POST:templates/validate':
+        return await handleValidateTemplate(event);
       case 'GET:':
       case 'GET:list':
         return await handleGetUserAssistants(userId);
@@ -164,213 +186,136 @@ async function verifyToken(event: APIGatewayProxyEvent): Promise<APIGatewayProxy
 
 async function handleGetPromptTemplates(): Promise<APIGatewayProxyResult> {
   try {
-    // For MVP, return predefined templates (in production, fetch from DynamoDB)
-    const templates: PromptTemplate[] = [
-      {
-        id: 'customer-service',
-        name: 'Customer Service Assistant',
-        category: 'support',
-        description: 'Professional customer service with call routing capabilities',
-        segments: [
-          {
-            id: 'intro',
-            type: 'original',
-            label: 'Introduction',
-            content: 'You are a professional AI customer service assistant. Your primary goal is to help customers efficiently and courteously.',
-            editable: false
-          },
-          {
-            id: 'company-name',
-            type: 'dynamic',
-            label: 'Company Name',
-            content: '',
-            editable: true,
-            placeholder: 'Enter your company name',
-            required: true,
-            validation: 'min:2,max:50'
-          },
-          {
-            id: 'business-hours',
-            type: 'dynamic',
-            label: 'Business Hours',
-            content: '',
-            editable: true,
-            placeholder: 'e.g., Monday-Friday 9AM-5PM EST',
-            required: true
-          },
-          {
-            id: 'services-offered',
-            type: 'dynamic',
-            label: 'Services/Products',
-            content: '',
-            editable: true,
-            placeholder: 'List your main services or products',
-            required: true
-          },
-          {
-            id: 'transfer-number',
-            type: 'dynamic',
-            label: 'Transfer Phone Number',
-            content: '',
-            editable: true,
-            placeholder: 'Phone number for live agent transfer',
-            required: false,
-            validation: 'phone'
-          },
-          {
-            id: 'instructions',
-            type: 'original',
-            label: 'Core Instructions',
-            content: 'Always be polite and professional. If you cannot answer a question or if the customer requests to speak with a human, offer to transfer them to a live agent. Keep responses concise but helpful.',
-            editable: false
-          }
-        ],
-        voiceDefaults: {
-          provider: 'elevenlabs',
-          voiceId: 'ErXwobaYiN019PkySvjV',
-          speed: 1.0,
-          stability: 0.7
-        },
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'sales-assistant',
-        name: 'Sales Assistant',
-        category: 'sales',
-        description: 'Lead qualification and sales support assistant',
-        segments: [
-          {
-            id: 'intro',
-            type: 'original',
-            label: 'Introduction',
-            content: 'You are an enthusiastic and knowledgeable sales assistant. Your goal is to understand customer needs and guide them toward the best solution.',
-            editable: false
-          },
-          {
-            id: 'company-name',
-            type: 'dynamic',
-            label: 'Company Name',
-            content: '',
-            editable: true,
-            placeholder: 'Enter your company name',
-            required: true
-          },
-          {
-            id: 'products-services',
-            type: 'dynamic',
-            label: 'Products/Services',
-            content: '',
-            editable: true,
-            placeholder: 'Describe your key offerings',
-            required: true
-          },
-          {
-            id: 'unique-value',
-            type: 'dynamic',
-            label: 'Unique Value Proposition',
-            content: '',
-            editable: true,
-            placeholder: 'What makes your company different?',
-            required: true
-          },
-          {
-            id: 'pricing-approach',
-            type: 'dynamic',
-            label: 'Pricing Approach',
-            content: '',
-            editable: true,
-            placeholder: 'How should pricing questions be handled?',
-            required: false
-          },
-          {
-            id: 'sales-process',
-            type: 'original',
-            label: 'Sales Process',
-            content: 'Qualify leads by asking about their needs, timeline, and decision-making process. Always aim to schedule a follow-up call or meeting. Be helpful but not pushy.',
-            editable: false
-          }
-        ],
-        voiceDefaults: {
-          provider: 'elevenlabs',
-          voiceId: 'AZnzlk1XvdvUeBnXmlld',
-          speed: 1.1,
-          stability: 0.8
-        },
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'appointment-booking',
-        name: 'Appointment Booking',
-        category: 'scheduling',
-        description: 'Schedule appointments and manage calendar integration',
-        segments: [
-          {
-            id: 'intro',
-            type: 'original',
-            label: 'Introduction',
-            content: 'You are a helpful appointment booking assistant. Your primary function is to help customers schedule appointments efficiently.',
-            editable: false
-          },
-          {
-            id: 'business-name',
-            type: 'dynamic',
-            label: 'Business Name',
-            content: '',
-            editable: true,
-            placeholder: 'Enter your business name',
-            required: true
-          },
-          {
-            id: 'services-list',
-            type: 'dynamic',
-            label: 'Available Services',
-            content: '',
-            editable: true,
-            placeholder: 'List services that can be booked',
-            required: true
-          },
-          {
-            id: 'availability',
-            type: 'dynamic',
-            label: 'General Availability',
-            content: '',
-            editable: true,
-            placeholder: 'e.g., Monday-Friday 9AM-5PM, weekends by appointment',
-            required: true
-          },
-          {
-            id: 'booking-requirements',
-            type: 'dynamic',
-            label: 'Booking Requirements',
-            content: '',
-            editable: true,
-            placeholder: 'What information do you need from customers?',
-            required: false
-          },
-          {
-            id: 'booking-process',
-            type: 'original',
-            label: 'Booking Process',
-            content: 'Always confirm the service, preferred date/time, and contact information. If the requested time is not available, offer alternatives. Be clear about any preparation required.',
-            editable: false
-          }
-        ],
-        voiceDefaults: {
-          provider: 'elevenlabs',
-          voiceId: 'EXAVITQu4vr4xnSDxMaL',
-          speed: 1.0,
-          stability: 0.6
-        },
-        createdAt: new Date().toISOString()
+    console.log('Getting prompt templates using enhanced system');
+    
+    // Get strategic templates (predefined enhanced templates)
+    const strategicTemplates = [...STRATEGIC_TEMPLATES, ...STRATEGIC_TEMPLATES_CONTINUED];
+    
+    // Try to get templates from database first, fall back to strategic templates
+    let templates;
+    try {
+      templates = await templateService.getActiveTemplates();
+      console.log(`Retrieved ${templates.length} templates from database`);
+      
+      // If no templates in database, use strategic templates
+      if (templates.length === 0) {
+        console.log('No templates in database, using strategic templates');
+        templates = strategicTemplates.map(template => ({
+          templateId: template.id,
+          name: template.name,
+          version: template.version,
+          status: template.status,
+          templateType: 'predefined' as const,
+          category: template.category.primary,
+          industry: template.industry,
+          complexity: template.complexity,
+          templateData: JSON.stringify(template),
+          usageCount: template.metadata.usage.timesUsed,
+          averageRating: template.metadata.usage.averageRating,
+          lastUsed: template.metadata.usage.lastUsed,
+          createdAt: template.metadata.createdAt,
+          updatedAt: template.metadata.updatedAt,
+          createdBy: template.metadata.createdBy,
+          tags: template.metadata.tags,
+          keywords: template.documentation.description.toLowerCase(),
+          isLatestVersion: true,
+          visibility: 'public' as const
+        }));
       }
-    ];
+    } catch (dbError) {
+      console.warn('Database error, falling back to strategic templates:', dbError);
+      templates = strategicTemplates.map(template => ({
+        templateId: template.id,
+        name: template.name,
+        version: template.version,
+        status: template.status,
+        templateType: 'predefined' as const,
+        category: template.category.primary,
+        industry: template.industry,
+        complexity: template.complexity,
+        templateData: JSON.stringify(template),
+        usageCount: template.metadata.usage.timesUsed,
+        averageRating: template.metadata.usage.averageRating,
+        lastUsed: template.metadata.usage.lastUsed,
+        createdAt: template.metadata.createdAt,
+        updatedAt: template.metadata.updatedAt,
+        createdBy: template.metadata.createdBy,
+        tags: template.metadata.tags,
+        keywords: template.documentation.description.toLowerCase(),
+        isLatestVersion: true,
+        visibility: 'public' as const
+      }));
+    }
+
+    // Transform for frontend compatibility
+    const frontendTemplates = templates.map(template => {
+      let templateData: EnhancedPromptTemplate;
+      try {
+        templateData = JSON.parse(template.templateData);
+      } catch (parseError) {
+        console.error('Error parsing template data:', parseError);
+        // Return a basic template structure if parsing fails
+        return {
+          id: template.templateId,
+          name: template.name,
+          category: template.category,
+          description: 'Enhanced template - see documentation',
+          complexity: template.complexity,
+          industry: template.industry,
+          segments: [],
+          voiceDefaults: {
+            provider: 'elevenlabs',
+            voiceId: 'ErXwobaYiN019PkySvjV',
+            speed: 1.0,
+            stability: 0.7
+          },
+          createdAt: template.createdAt,
+          usageCount: template.usageCount,
+          averageRating: template.averageRating
+        };
+      }
+
+      return {
+        id: template.templateId,
+        name: template.name,
+        category: template.category,
+        description: templateData.documentation?.description || 'Enhanced business template',
+        complexity: template.complexity,
+        industry: template.industry,
+        businessObjectives: templateData.businessObjectives?.map(obj => obj.name) || [],
+        useCase: templateData.useCase?.title || '',
+        estimatedSetupTime: templateData.userExperience?.estimatedSetupTime || 10,
+        segments: templateData.segments?.map(segment => ({
+          id: segment.id,
+          type: segment.editable ? 'dynamic' : 'original',
+          label: segment.label,
+          content: segment.content,
+          editable: segment.editable,
+          placeholder: segment.placeholder,
+          required: segment.validation?.type === 'required',
+          helpText: segment.helpText,
+          businessPurpose: segment.businessPurpose
+        })) || [],
+        voiceDefaults: {
+          provider: templateData.vapiConfiguration?.voice?.provider || 'elevenlabs',
+          voiceId: templateData.vapiConfiguration?.voice?.voiceId || 'ErXwobaYiN019PkySvjV',
+          speed: templateData.vapiConfiguration?.voice?.speed || 1.0,
+          stability: templateData.vapiConfiguration?.voice?.stability || 0.7
+        },
+        createdAt: template.createdAt,
+        usageCount: template.usageCount,
+        averageRating: template.averageRating,
+        tags: template.tags
+      };
+    });
 
     return {
       statusCode: 200,
       headers: corsHeaders,
       body: JSON.stringify({
-        templates,
-        total: templates.length
+        templates: frontendTemplates,
+        total: frontendTemplates.length,
+        enhanced: true
       })
     };
   } catch (error) {
@@ -378,7 +323,10 @@ async function handleGetPromptTemplates(): Promise<APIGatewayProxyResult> {
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ error: 'Failed to get prompt templates' })
+      body: JSON.stringify({ 
+        error: 'Failed to get prompt templates',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      })
     };
   }
 }
@@ -426,6 +374,7 @@ async function handleCreateAssistant(event: APIGatewayProxyEvent, userId: string
 
   try {
     const { name, templateId, dynamicSegments, voiceSettings } = JSON.parse(event.body);
+    console.log('Creating assistant with enhanced template system:', { name, templateId, userId });
 
     if (!name || !templateId || !dynamicSegments) {
       return {
@@ -435,22 +384,32 @@ async function handleCreateAssistant(event: APIGatewayProxyEvent, userId: string
       };
     }
 
-    // Get the prompt template
-    const templates = await getPromptTemplates();
-    const template = templates.find(t => t.id === templateId);
-    
-    if (!template) {
-      return {
-        statusCode: 404,
-        headers: corsHeaders,
-        body: JSON.stringify({ error: 'Prompt template not found' })
-      };
+    // Get the enhanced template
+    let template;
+    try {
+      const dbTemplate = await templateService.getTemplate(templateId);
+      template = JSON.parse(dbTemplate.templateData) as EnhancedPromptTemplate;
+      console.log('Retrieved enhanced template from database:', template.name);
+    } catch (dbError) {
+      console.warn('Template not found in database, checking strategic templates:', dbError);
+      // Fall back to strategic templates
+      const strategicTemplates = [...STRATEGIC_TEMPLATES, ...STRATEGIC_TEMPLATES_CONTINUED];
+      template = strategicTemplates.find(t => t.id === templateId);
+      
+      if (!template) {
+        return {
+          statusCode: 404,
+          headers: corsHeaders,
+          body: JSON.stringify({ error: 'Prompt template not found' })
+        };
+      }
+      console.log('Using strategic template:', template.name);
     }
 
-    // Assemble the complete prompt
-    const assembledPrompt = assemblePrompt(template, dynamicSegments);
+    // Assemble the complete prompt using enhanced template structure
+    const assembledPrompt = assembleEnhancedPrompt(template, dynamicSegments);
 
-    // Create assistant record
+    // Create enhanced assistant record
     const assistantId = uuidv4();
     const assistant: AssistantConfig = {
       id: assistantId,
@@ -459,7 +418,12 @@ async function handleCreateAssistant(event: APIGatewayProxyEvent, userId: string
       templateId,
       dynamicSegments,
       assembledPrompt,
-      voiceSettings: voiceSettings || template.voiceDefaults,
+      voiceSettings: voiceSettings || {
+        provider: template.vapiConfiguration.voice.provider,
+        voiceId: template.vapiConfiguration.voice.voiceId,
+        speed: template.vapiConfiguration.voice.speed,
+        stability: template.vapiConfiguration.voice.stability
+      },
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -468,21 +432,34 @@ async function handleCreateAssistant(event: APIGatewayProxyEvent, userId: string
     await docClient.send(new PutCommand({
       TableName: ASSISTANTS_TABLE,
       Item: {
-        assistantId: assistantId, // DynamoDB expects assistantId as key
-        ...assistant
+        assistantId: assistantId,
+        ...assistant,
+        // Add enhanced fields
+        templateVersion: template.version,
+        businessObjectives: JSON.stringify(template.businessObjectives),
+        industry: template.industry,
+        complexity: template.complexity
       }
     }));
+
+    console.log('Enhanced assistant created successfully:', assistantId);
 
     return {
       statusCode: 201,
       headers: corsHeaders,
       body: JSON.stringify({
-        assistant,
-        message: 'Assistant created successfully'
+        assistant: {
+          ...assistant,
+          templateVersion: template.version,
+          businessObjectives: template.businessObjectives,
+          industry: template.industry,
+          complexity: template.complexity
+        },
+        message: 'Enhanced assistant created successfully'
       })
     };
   } catch (error) {
-    console.error('Error creating assistant:', error);
+    console.error('Error creating enhanced assistant:', error);
     return {
       statusCode: 500,
       headers: corsHeaders,
@@ -545,9 +522,22 @@ async function handleDeployAssistant(event: APIGatewayProxyEvent, userId: string
 
     console.log('VAPI API key retrieved, length:', vapiApiKey.length);
 
-    // Create assistant in VAPI
-    const vapiResponse = await createVapiAssistant(assistant, vapiApiKey);
-    console.log('VAPI assistant created successfully:', vapiResponse.id);
+    // Get enhanced template for VAPI configuration
+    let enhancedTemplate;
+    try {
+      const dbTemplate = await templateService.getTemplate(assistant.templateId);
+      enhancedTemplate = JSON.parse(dbTemplate.templateData) as EnhancedPromptTemplate;
+      console.log('Using enhanced template for VAPI deployment:', enhancedTemplate.name);
+    } catch (templateError) {
+      console.warn('Could not load enhanced template, using fallback config:', templateError);
+      // Try strategic templates as fallback
+      const strategicTemplates = [...STRATEGIC_TEMPLATES, ...STRATEGIC_TEMPLATES_CONTINUED];
+      enhancedTemplate = strategicTemplates.find(t => t.id === assistant.templateId);
+    }
+
+    // Create assistant in VAPI with enhanced configuration
+    const vapiResponse = await createVapiAssistant(assistant, vapiApiKey, enhancedTemplate);
+    console.log('VAPI enhanced assistant created successfully:', vapiResponse.id);
 
     // Update assistant with VAPI details
     await docClient.send(new UpdateCommand({
@@ -693,65 +683,192 @@ function assemblePrompt(template: PromptTemplate, dynamicSegments: Record<string
   }).filter(content => content.trim().length > 0).join('\n\n');
 }
 
+function assembleEnhancedPrompt(template: EnhancedPromptTemplate, dynamicSegments: Record<string, string>): string {
+  console.log('Assembling enhanced prompt for template:', template.name);
+  
+  const assembledSegments = template.segments.map(segment => {
+    if (!segment.editable) {
+      // Non-editable segments use their content directly
+      return segment.content;
+    } else {
+      // Dynamic segments use user input or fallback to placeholder
+      const value = dynamicSegments[segment.id];
+      if (segment.validation?.type === 'required' && !value) {
+        throw new Error(`Required field '${segment.label}' is missing`);
+      }
+      return value || segment.placeholder || segment.content || '';
+    }
+  }).filter(content => content && content.trim().length > 0);
+
+  // Add business context to the prompt
+  const businessContext = template.businessObjectives
+    .map(obj => `Objective: ${obj.name} - ${obj.description}`)
+    .join('\n');
+
+  // Include conversation objectives and industry context
+  const contextualInfo = [
+    `Industry: ${template.industry.join(', ')}`,
+    `Use Case: ${template.useCase.title}`,
+    `Business Objectives:\n${businessContext}`,
+    `Expected Outcomes: ${template.useCase.expectedOutcomes.join(', ')}`
+  ].join('\n\n');
+
+  // Combine everything into a comprehensive prompt
+  const fullPrompt = [
+    contextualInfo,
+    '--- CONVERSATION GUIDELINES ---',
+    ...assembledSegments,
+    '--- PERFORMANCE EXPECTATIONS ---',
+    `Target Call Duration: ${template.useCase.avgCallDuration} seconds`,
+    `Success Rate Target: ${template.useCase.successRate}%`,
+    template.vapiConfiguration.conversationSettings.firstMessage ? 
+      `Opening Message: ${template.vapiConfiguration.conversationSettings.firstMessage}` : '',
+    template.vapiConfiguration.conversationSettings.endCallMessage ? 
+      `Closing Message: ${template.vapiConfiguration.conversationSettings.endCallMessage}` : ''
+  ].filter(content => content && content.trim().length > 0).join('\n\n');
+
+  console.log('Enhanced prompt assembled, length:', fullPrompt.length);
+  return fullPrompt;
+}
+
 async function getVapiApiKey(): Promise<string> {
+  console.log('Getting VAPI API key, secret name:', VAPI_SECRET_NAME);
+  console.log('Environment variables available:', {
+    ADMIN_VAPI_API_KEY: !!process.env.ADMIN_VAPI_API_KEY,
+    VAPI_API_KEY: !!process.env.VAPI_API_KEY
+  });
+  
   try {
     const result = await secretsClient.send(new GetSecretValueCommand({
       SecretId: VAPI_SECRET_NAME
     }));
     
+    console.log('Secrets Manager response:', {
+      hasSecretString: !!result.SecretString,
+      arn: result.ARN
+    });
+    
     if (result.SecretString) {
       const secretData = JSON.parse(result.SecretString);
-      return secretData.apiKey || secretData.adminApiKey || '';
+      console.log('Secret data keys:', Object.keys(secretData));
+      const apiKey = secretData.apiKey || secretData.adminApiKey || '';
+      console.log('Retrieved API key length:', apiKey.length);
+      return apiKey;
     }
     
-    return process.env.ADMIN_VAPI_API_KEY || '';
+    console.log('No secret string found, falling back to env vars');
+    return process.env.ADMIN_VAPI_API_KEY || process.env.VAPI_API_KEY || '';
   } catch (error) {
-    console.warn('Could not retrieve VAPI API key from Secrets Manager, using env var:', error);
-    return process.env.ADMIN_VAPI_API_KEY || '';
+    console.error('Error retrieving VAPI API key from Secrets Manager:', error);
+    console.log('Falling back to environment variables');
+    return process.env.ADMIN_VAPI_API_KEY || process.env.VAPI_API_KEY || '';
   }
 }
 
-async function createVapiAssistant(assistant: AssistantConfig, apiKey: string) {
-  console.log('Creating VAPI assistant with config:', {
+async function createVapiAssistant(assistant: AssistantConfig, apiKey: string, enhancedTemplate?: EnhancedPromptTemplate) {
+  console.log('Creating VAPI assistant with enhanced config:', {
     name: assistant.name,
     apiKeyPresent: !!apiKey,
-    voiceSettings: assistant.voiceSettings
+    voiceSettings: assistant.voiceSettings,
+    hasEnhancedTemplate: !!enhancedTemplate
   });
 
-  // Fixed VAPI configuration according to their API spec
-  const vapiConfig = {
-    name: assistant.name,
-    model: {
-      provider: 'openai',
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: assistant.assembledPrompt
-        }
-      ],
-      maxTokens: 250,
-      temperature: 0.7
-    },
-    voice: {
-      provider: 'elevenlabs', // Force ElevenLabs for now
-      voiceId: assistant.voiceSettings.voiceId || 'ErXwobaYiN019PkySvjV', // Rachel voice as fallback
-      model: 'eleven_turbo_v2',
-      stability: assistant.voiceSettings.stability || 0.5,
-      similarityBoost: 0.75,
-      style: 0.0,
-      useSpeakerBoost: true
-    },
-    firstMessage: 'Hello! How can I help you today?',
-    endCallMessage: 'Thank you for calling. Have a great day!',
-    recordingEnabled: true,
-    maxDurationSeconds: 600,
-    silenceTimeoutSeconds: 30,
-    responseDelaySeconds: 0.4,
-    numWordsToInterruptAssistant: 2
-  };
+  // Build VAPI configuration using enhanced template if available
+  let vapiConfig;
+  
+  if (enhancedTemplate?.vapiConfiguration) {
+    console.log('Using enhanced VAPI configuration from template');
+    const enhancedConfig = enhancedTemplate.vapiConfiguration;
+    
+    vapiConfig = {
+      name: assistant.name,
+      model: {
+        provider: enhancedConfig.model.provider,
+        model: enhancedConfig.model.modelName,
+        messages: [
+          {
+            role: 'system',
+            content: assistant.assembledPrompt
+          }
+        ],
+        maxTokens: enhancedConfig.model.maxTokens,
+        temperature: enhancedConfig.model.temperature
+      },
+      voice: {
+        provider: enhancedConfig.voice.provider,
+        voiceId: enhancedConfig.voice.voiceId,
+        model: enhancedConfig.voice.provider === 'elevenlabs' ? 'eleven_turbo_v2' : undefined,
+        stability: enhancedConfig.voice.stability,
+        similarityBoost: enhancedConfig.voice.clarity,
+        style: enhancedConfig.voice.style,
+        useSpeakerBoost: enhancedConfig.voice.useSpeakerBoost
+      },
+      firstMessage: enhancedConfig.conversationSettings.firstMessage,
+      endCallMessage: enhancedConfig.conversationSettings.endCallMessage,
+      transferMessage: enhancedConfig.conversationSettings.transferMessage,
+      recordingEnabled: enhancedConfig.conversationSettings.recordingEnabled,
+      maxDurationSeconds: enhancedConfig.conversationSettings.maxDurationSeconds,
+      silenceTimeoutSeconds: enhancedConfig.conversationSettings.silenceTimeoutSeconds,
+      responseDelaySeconds: enhancedConfig.conversationSettings.responseDelaySeconds,
+      numWordsToInterruptAssistant: enhancedConfig.conversationSettings.numWordsToInterruptAssistant
+    };
 
-  console.log('Sending request to VAPI with config:', JSON.stringify(vapiConfig, null, 2));
+    // Add webhook configuration if present
+    if (enhancedConfig.webhookSettings?.url) {
+      vapiConfig.serverUrl = enhancedConfig.webhookSettings.url;
+      vapiConfig.serverUrlSecret = 'webhook-secret'; // Should be from environment
+    }
+
+    // Add escalation triggers as functions (simplified)
+    if (enhancedConfig.businessRules?.escalationTriggers) {
+      vapiConfig.functions = enhancedConfig.businessRules.escalationTriggers.map(trigger => ({
+        name: `escalate_${trigger.trigger}`,
+        description: `Escalate call when ${trigger.condition}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            reason: { type: 'string', description: 'Reason for escalation' }
+          }
+        }
+      }));
+    }
+  } else {
+    console.log('Using fallback VAPI configuration');
+    // Fallback to basic configuration
+    vapiConfig = {
+      name: assistant.name,
+      model: {
+        provider: 'openai',
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: assistant.assembledPrompt
+          }
+        ],
+        maxTokens: 250,
+        temperature: 0.7
+      },
+      voice: {
+        provider: 'elevenlabs',
+        voiceId: assistant.voiceSettings.voiceId || 'ErXwobaYiN019PkySvjV',
+        model: 'eleven_turbo_v2',
+        stability: assistant.voiceSettings.stability || 0.5,
+        similarityBoost: 0.75,
+        style: 0.0,
+        useSpeakerBoost: true
+      },
+      firstMessage: 'Hello! How can I help you today?',
+      endCallMessage: 'Thank you for calling. Have a great day!',
+      recordingEnabled: true,
+      maxDurationSeconds: 600,
+      silenceTimeoutSeconds: 30,
+      responseDelaySeconds: 0.4,
+      numWordsToInterruptAssistant: 2
+    };
+  }
+
+  console.log('Sending enhanced request to VAPI:', JSON.stringify(vapiConfig, null, 2));
 
   try {
     const response = await axios.post('https://api.vapi.ai/assistant', vapiConfig, {
@@ -759,29 +876,28 @@ async function createVapiAssistant(assistant: AssistantConfig, apiKey: string) {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      timeout: 30000 // 30 second timeout
+      timeout: 30000
     });
 
-    console.log('VAPI response received:', response.status, response.data);
+    console.log('VAPI enhanced assistant created:', response.status, response.data);
     return response.data;
   } catch (error) {
-    console.error('VAPI API Error Details:', {
+    console.error('VAPI Enhanced API Error:', {
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
-      headers: error.response?.headers,
+      configSent: vapiConfig,
       message: error.message
     });
     
-    // More detailed error handling
     if (error.response?.status === 401) {
       throw new Error('VAPI API authentication failed. Please check your API key.');
     } else if (error.response?.status === 400) {
-      throw new Error(`VAPI API request error: ${JSON.stringify(error.response.data)}`);
+      throw new Error(`VAPI API validation error: ${JSON.stringify(error.response.data)}`);
     } else if (error.response?.status === 429) {
       throw new Error('VAPI API rate limit exceeded. Please try again later.');
     } else {
-      throw new Error(`VAPI API error: ${error.message}`);
+      throw new Error(`VAPI Enhanced API error: ${error.message}`);
     }
   }
 }
@@ -811,4 +927,133 @@ async function handleTestAssistant(event: APIGatewayProxyEvent, userId: string):
     headers: corsHeaders,
     body: JSON.stringify({ error: 'Test assistant not implemented yet' })
   };
+}
+
+async function handleSearchTemplates(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  try {
+    const body = event.body ? JSON.parse(event.body) : {};
+    const { filters = {}, page = 1, limit = 20 } = body;
+
+    console.log('Searching templates with filters:', filters);
+
+    const searchResult = await templateService.searchTemplates(filters, page, limit);
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        success: true,
+        data: searchResult,
+        pagination: {
+          page: searchResult.page,
+          limit: searchResult.limit,
+          total: searchResult.total,
+          pages: Math.ceil(searchResult.total / searchResult.limit)
+        }
+      })
+    };
+  } catch (error) {
+    console.error('Error searching templates:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ 
+        error: 'Failed to search templates',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      })
+    };
+  }
+}
+
+async function handleGetPopularTemplates(): Promise<APIGatewayProxyResult> {
+  try {
+    const popularTemplates = await templateService.getPopularTemplates(10);
+
+    const formattedTemplates = popularTemplates.map(template => {
+      let templateData: EnhancedPromptTemplate;
+      try {
+        templateData = JSON.parse(template.templateData);
+      } catch (parseError) {
+        // Return basic info if parsing fails
+        return {
+          id: template.templateId,
+          name: template.name,
+          category: template.category,
+          description: 'Popular template',
+          usageCount: template.usageCount,
+          averageRating: template.averageRating
+        };
+      }
+
+      return {
+        id: template.templateId,
+        name: template.name,
+        category: template.category,
+        description: templateData.documentation?.description || 'Popular business template',
+        complexity: template.complexity,
+        industry: template.industry,
+        usageCount: template.usageCount,
+        averageRating: template.averageRating,
+        tags: template.tags,
+        businessObjectives: templateData.businessObjectives?.map(obj => obj.name) || []
+      };
+    });
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        templates: formattedTemplates,
+        total: formattedTemplates.length
+      })
+    };
+  } catch (error) {
+    console.error('Error getting popular templates:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ 
+        error: 'Failed to get popular templates',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      })
+    };
+  }
+}
+
+async function handleValidateTemplate(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  try {
+    if (!event.body) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Template data is required' })
+      };
+    }
+
+    const templateData = JSON.parse(event.body) as EnhancedPromptTemplate;
+    console.log('Validating template:', templateData.name);
+
+    const validation = await templateService.validateTemplate(templateData);
+
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        validation,
+        isValid: validation.isValid,
+        score: validation.score.overall,
+        recommendations: validation.suggestions.filter(s => s.expectedImpact === 'high')
+      })
+    };
+  } catch (error) {
+    console.error('Error validating template:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ 
+        error: 'Failed to validate template',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      })
+    };
+  }
 }

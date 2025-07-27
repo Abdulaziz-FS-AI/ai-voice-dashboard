@@ -1,0 +1,519 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Enhanced DynamoDB Infrastructure for Voice Matrix VAPI Assistant Platform'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name for resource tagging and configuration'
+  
+  ProjectName:
+    Type: String
+    Default: 'VoiceMatrix'
+    Description: 'Project name for resource naming'
+
+Resources:
+  # ============================================================================
+  # TABLE 1: PROMPT TEMPLATES - Core template management
+  # ============================================================================
+  PromptTemplatesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-PromptTemplates-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: templateId
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: industry
+          AttributeType: S
+        - AttributeName: usageCount
+          AttributeType: N
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: updatedAt
+          AttributeType: S
+        - AttributeName: createdBy
+          AttributeType: S
+      KeySchema:
+        - AttributeName: templateId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: Category-CreatedAt-Index
+          KeySchema:
+            - AttributeName: category
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: Industry-UsageCount-Index
+          KeySchema:
+            - AttributeName: industry
+              KeyType: HASH
+            - AttributeName: usageCount
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: Status-UpdatedAt-Index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: updatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: CreatedBy-CreatedAt-Index
+          KeySchema:
+            - AttributeName: createdBy
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BackupPolicy:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: 'Template Management'
+
+  # ============================================================================
+  # TABLE 2: USER ASSISTANTS - Assistant instances and configurations
+  # ============================================================================
+  UserAssistantsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-UserAssistants-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: assistantId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: lastCallAt
+          AttributeType: S
+        - AttributeName: templateId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: assistantId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserId-CreatedAt-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: Status-LastCallAt-Index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: lastCallAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: TemplateId-CreatedAt-Index
+          KeySchema:
+            - AttributeName: templateId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserId-Status-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      LocalSecondaryIndexes:
+        - IndexName: AssistantId-LastCallAt-Index
+          KeySchema:
+            - AttributeName: assistantId
+              KeyType: HASH
+            - AttributeName: lastCallAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: 'Assistant Management'
+
+  # ============================================================================
+  # TABLE 3: CALL LOGS - Call analytics and performance data
+  # ============================================================================
+  CallLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-CallLogs-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: callId
+          AttributeType: S
+        - AttributeName: assistantId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: startTime
+          AttributeType: S
+        - AttributeName: yearMonth
+          AttributeType: S
+        - AttributeName: templateId
+          AttributeType: S
+        - AttributeName: callStatus
+          AttributeType: S
+      KeySchema:
+        - AttributeName: callId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: AssistantId-StartTime-Index
+          KeySchema:
+            - AttributeName: assistantId
+              KeyType: HASH
+            - AttributeName: startTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserId-StartTime-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: startTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: YearMonth-StartTime-Index
+          KeySchema:
+            - AttributeName: yearMonth
+              KeyType: HASH
+            - AttributeName: startTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: TemplateId-StartTime-Index
+          KeySchema:
+            - AttributeName: templateId
+              KeyType: HASH
+            - AttributeName: startTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: CallStatus-StartTime-Index
+          KeySchema:
+            - AttributeName: callStatus
+              KeyType: HASH
+            - AttributeName: startTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: dataRetentionDate
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: 'Call Analytics'
+
+  # ============================================================================
+  # TABLE 4: TEMPLATE ANALYTICS - Template performance and usage metrics
+  # ============================================================================
+  TemplateAnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-TemplateAnalytics-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: analyticsId
+          AttributeType: S
+        - AttributeName: templateId
+          AttributeType: S
+        - AttributeName: period
+          AttributeType: S
+        - AttributeName: periodType
+          AttributeType: S
+        - AttributeName: popularityScore
+          AttributeType: N
+        - AttributeName: growthRate
+          AttributeType: N
+      KeySchema:
+        - AttributeName: analyticsId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: TemplateId-Period-Index
+          KeySchema:
+            - AttributeName: templateId
+              KeyType: HASH
+            - AttributeName: period
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: PeriodType-PopularityScore-Index
+          KeySchema:
+            - AttributeName: periodType
+              KeyType: HASH
+            - AttributeName: popularityScore
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: Period-GrowthRate-Index
+          KeySchema:
+            - AttributeName: period
+              KeyType: HASH
+            - AttributeName: growthRate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: 'Template Analytics'
+
+  # ============================================================================
+  # TABLE 5: USER SESSIONS - User activity and engagement tracking
+  # ============================================================================
+  UserSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-UserSessions-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: startTime
+          AttributeType: S
+        - AttributeName: lastActivity
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserId-StartTime-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: startTime
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserId-LastActivity-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: lastActivity
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: 'Session Management'
+
+  # ============================================================================
+  # IAM ROLES AND POLICIES
+  # ============================================================================
+  DynamoDBAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-DynamoDB-Access-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBFullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:DescribeTable
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource:
+                  - !GetAtt PromptTemplatesTable.Arn
+                  - !Sub '${PromptTemplatesTable.Arn}/*'
+                  - !GetAtt UserAssistantsTable.Arn
+                  - !Sub '${UserAssistantsTable.Arn}/*'
+                  - !GetAtt CallLogsTable.Arn
+                  - !Sub '${CallLogsTable.Arn}/*'
+                  - !GetAtt TemplateAnalyticsTable.Arn
+                  - !Sub '${TemplateAnalyticsTable.Arn}/*'
+                  - !GetAtt UserSessionsTable.Arn
+                  - !Sub '${UserSessionsTable.Arn}/*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # MONITORING AND ALARMS
+  # ============================================================================
+  PromptTemplatesTableAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-PromptTemplates-HighReadThrottle-${Environment}'
+      AlarmDescription: 'Monitor high read throttling on PromptTemplates table'
+      MetricName: ReadThrottledEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref PromptTemplatesTable
+      AlarmActions:
+        - !Ref SNSTopicForAlerts
+
+  UserAssistantsTableAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-UserAssistants-HighWriteThrottle-${Environment}'
+      AlarmDescription: 'Monitor high write throttling on UserAssistants table'
+      MetricName: WriteThrottledEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref UserAssistantsTable
+      AlarmActions:
+        - !Ref SNSTopicForAlerts
+
+  SNSTopicForAlerts:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-DynamoDB-Alerts-${Environment}'
+      DisplayName: 'Voice Matrix DynamoDB Monitoring Alerts'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  PromptTemplatesTableName:
+    Description: 'Name of the Prompt Templates table'
+    Value: !Ref PromptTemplatesTable
+    Export:
+      Name: !Sub '${AWS::StackName}-PromptTemplatesTable'
+
+  UserAssistantsTableName:
+    Description: 'Name of the User Assistants table'
+    Value: !Ref UserAssistantsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-UserAssistantsTable'
+
+  CallLogsTableName:
+    Description: 'Name of the Call Logs table'
+    Value: !Ref CallLogsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-CallLogsTable'
+
+  TemplateAnalyticsTableName:
+    Description: 'Name of the Template Analytics table'
+    Value: !Ref TemplateAnalyticsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-TemplateAnalyticsTable'
+
+  UserSessionsTableName:
+    Description: 'Name of the User Sessions table'
+    Value: !Ref UserSessionsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-UserSessionsTable'
+
+  DynamoDBAccessRoleArn:
+    Description: 'ARN of the DynamoDB access role for Lambda functions'
+    Value: !GetAtt DynamoDBAccessRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DynamoDBAccessRole'
+
+  PromptTemplatesTableArn:
+    Description: 'ARN of the Prompt Templates table'
+    Value: !GetAtt PromptTemplatesTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-PromptTemplatesTableArn'
+
+  PromptTemplatesStreamArn:
+    Description: 'ARN of the Prompt Templates table stream'
+    Value: !GetAtt PromptTemplatesTable.StreamArn
+    Export:
+      Name: !Sub '${AWS::StackName}-PromptTemplatesStreamArn'
+
+  CallLogsStreamArn:
+    Description: 'ARN of the Call Logs table stream'
+    Value: !GetAtt CallLogsTable.StreamArn
+    Export:
+      Name: !Sub '${AWS::StackName}-CallLogsStreamArn'

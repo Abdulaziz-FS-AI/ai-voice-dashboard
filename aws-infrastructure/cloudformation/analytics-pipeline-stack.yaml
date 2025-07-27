@@ -1,0 +1,478 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Real-time Analytics Pipeline for Voice Matrix - Processes VAPI events for business intelligence'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  ProjectName:
+    Type: String
+    Default: 'VoiceMatrix'
+    Description: 'Project name'
+
+  DynamoDBStackName:
+    Type: String
+    Description: 'Name of the DynamoDB stack to reference'
+    Default: 'VoiceMatrix-Enhanced-Infrastructure-dev'
+
+  AlertEmail:
+    Type: String
+    Description: 'Email address for analytics alerts'
+    Default: ''
+
+Resources:
+  # ============================================================================
+  # IAM ROLE FOR ANALYTICS PROCESSOR
+  # ============================================================================
+  AnalyticsProcessorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-Analytics-Processor-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAnalyticsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-CallLogsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+        - PolicyName: SNSPublishAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref AnalyticsAlertsTopic
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # ANALYTICS PROCESSOR LAMBDA FUNCTION
+  # ============================================================================
+  AnalyticsProcessorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-Analytics-Processor-${Environment}'
+      Runtime: nodejs18.x
+      Handler: analytics-processor.handler
+      Role: !GetAtt AnalyticsProcessorRole.Arn
+      Timeout: 300  # 5 minutes for complex analytics
+      MemorySize: 1024
+      ReservedConcurrencyLimit: 100
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          PROJECT_NAME: !Ref ProjectName
+          REGION: !Ref AWS::Region
+          TEMPLATE_ANALYTICS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+          USER_ASSISTANTS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+          CALL_LOGS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-CallLogsTable'
+          ANALYTICS_ALERTS_TOPIC: !Ref AnalyticsAlertsTopic
+          NODE_ENV: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Analytics processor - deploy actual code');
+            console.log('Event:', JSON.stringify(event, null, 2));
+            return { statusCode: 200 };
+          };
+      DeadLetterConfig:
+        TargetArn: !GetAtt AnalyticsDLQ.Arn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # EVENTBRIDGE RULES FOR ANALYTICS PROCESSING
+  # ============================================================================
+  
+  # Rule for call analytics events
+  CallAnalyticsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-Call-Analytics-Rule-${Environment}'
+      Description: 'Process call analytics events from VAPI webhooks'
+      EventPattern:
+        source:
+          - 'voice-matrix.vapi-webhooks'
+        detail-type:
+          - 'Call Analytics Event'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalyticsProcessorLambda.Arn
+          Id: 'CallAnalyticsProcessor'
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+          DeadLetterConfig:
+            Arn: !GetAtt AnalyticsDLQ.Arn
+
+  # Rule for template usage events
+  TemplateUsageRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-Template-Usage-Rule-${Environment}'
+      Description: 'Process template usage and engagement events'
+      EventPattern:
+        source:
+          - 'voice-matrix.templates'
+        detail-type:
+          - 'Template Usage Event'
+          - 'Template Rating Event'
+          - 'Template View Event'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalyticsProcessorLambda.Arn
+          Id: 'TemplateUsageProcessor'
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+          DeadLetterConfig:
+            Arn: !GetAtt AnalyticsDLQ.Arn
+
+  # Rule for assistant performance events
+  AssistantPerformanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-Assistant-Performance-Rule-${Environment}'
+      Description: 'Process assistant creation and performance events'
+      EventPattern:
+        source:
+          - 'voice-matrix.assistants'
+        detail-type:
+          - 'Assistant Created Event'
+          - 'Assistant Deployed Event'
+          - 'Assistant Performance Event'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalyticsProcessorLambda.Arn
+          Id: 'AssistantPerformanceProcessor'
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+          DeadLetterConfig:
+            Arn: !GetAtt AnalyticsDLQ.Arn
+
+  # Lambda permissions for EventBridge
+  CallAnalyticsRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalyticsProcessorLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CallAnalyticsRule.Arn
+
+  TemplateUsageRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalyticsProcessorLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt TemplateUsageRule.Arn
+
+  AssistantPerformanceRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalyticsProcessorLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AssistantPerformanceRule.Arn
+
+  # ============================================================================
+  # KINESIS DATA STREAM FOR HIGH-VOLUME ANALYTICS (Optional)
+  # ============================================================================
+  AnalyticsDataStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Sub '${ProjectName}-Analytics-Stream-${Environment}'
+      ShardCount: !If 
+        - IsProduction
+        - 3
+        - 1
+      RetentionPeriodHours: 168  # 7 days
+      StreamModeDetails:
+        StreamMode: PROVISIONED
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Kinesis processor for high-volume analytics
+  KinesisAnalyticsProcessor:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-Kinesis-Analytics-${Environment}'
+      Runtime: nodejs18.x
+      Handler: kinesis-analytics.handler
+      Role: !GetAtt AnalyticsProcessorRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          TEMPLATE_ANALYTICS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Kinesis analytics processor');
+            for (const record of event.Records) {
+              const payload = JSON.parse(Buffer.from(record.kinesis.data, 'base64').toString());
+              console.log('Processing:', payload);
+              // Batch analytics processing logic here
+            }
+            return { statusCode: 200 };
+          };
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Event source mapping for Kinesis
+  KinesisEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt AnalyticsDataStream.Arn
+      FunctionName: !Ref KinesisAnalyticsProcessor
+      StartingPosition: LATEST
+      BatchSize: 100
+      MaximumBatchingWindowInSeconds: 5
+      ParallelizationFactor: 2
+
+  # ============================================================================
+  # SCHEDULED ANALYTICS JOBS
+  # ============================================================================
+  
+  # Daily analytics aggregation
+  DailyAnalyticsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-Daily-Analytics-${Environment}'
+      Description: 'Run daily analytics aggregation'
+      ScheduleExpression: 'cron(0 2 * * ? *)'  # 2 AM UTC daily
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt DailyAnalyticsLambda.Arn
+          Id: 'DailyAnalyticsJob'
+
+  DailyAnalyticsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-Daily-Analytics-${Environment}'
+      Runtime: nodejs18.x
+      Handler: daily-analytics.handler
+      Role: !GetAtt AnalyticsProcessorRole.Arn
+      Timeout: 900  # 15 minutes
+      MemorySize: 2048
+      Environment:
+        Variables:
+          TEMPLATE_ANALYTICS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+          CALL_LOGS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-CallLogsTable'
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Daily analytics aggregation job');
+            // Daily analytics aggregation logic
+            return { statusCode: 200 };
+          };
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DailyAnalyticsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DailyAnalyticsLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DailyAnalyticsRule.Arn
+
+  # ============================================================================
+  # MONITORING AND ALERTING
+  # ============================================================================
+  AnalyticsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-Analytics-DLQ-${Environment}'
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  AnalyticsAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-Analytics-Alerts-${Environment}'
+      DisplayName: 'Voice Matrix Analytics Alerts'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Email subscription for alerts (optional)
+  AnalyticsAlertsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AnalyticsAlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # CloudWatch alarms
+  AnalyticsProcessorErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-Analytics-Processor-Errors-${Environment}'
+      AlarmDescription: 'Monitor analytics processor errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnalyticsProcessorLambda
+      AlarmActions:
+        - !Ref AnalyticsAlertsTopic
+
+  AnalyticsProcessorDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-Analytics-Processor-Duration-${Environment}'
+      AlarmDescription: 'Monitor analytics processor duration'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 240000  # 4 minutes (80% of timeout)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnalyticsProcessorLambda
+      AlarmActions:
+        - !Ref AnalyticsAlertsTopic
+
+  DLQMessageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-Analytics-DLQ-Messages-${Environment}'
+      AlarmDescription: 'Monitor failed analytics events in DLQ'
+      MetricName: ApproximateNumberOfVisibleMessages
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AnalyticsDLQ.QueueName
+      AlarmActions:
+        - !Ref AnalyticsAlertsTopic
+
+  # ============================================================================
+  # ANALYTICS DASHBOARD CUSTOM METRICS
+  # ============================================================================
+  CustomMetricsNamespace:
+    Type: AWS::CloudWatch::CompositeAlarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-Analytics-Health-${Environment}'
+      AlarmDescription: 'Overall analytics pipeline health'
+      CompositeAlarmRule: !Sub |
+        NOT (ALARM("${AnalyticsProcessorErrorAlarm}") OR 
+             ALARM("${AnalyticsProcessorDurationAlarm}") OR 
+             ALARM("${DLQMessageAlarm}"))
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AnalyticsAlertsTopic
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'prod']
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
+
+Outputs:
+  AnalyticsProcessorLambdaArn:
+    Description: 'Analytics Processor Lambda Function ARN'
+    Value: !GetAtt AnalyticsProcessorLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyticsProcessorArn'
+
+  AnalyticsDataStreamArn:
+    Description: 'Kinesis Analytics Data Stream ARN'
+    Value: !GetAtt AnalyticsDataStream.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyticsStreamArn'
+
+  AnalyticsAlertsTopicArn:
+    Description: 'Analytics Alerts SNS Topic ARN'
+    Value: !Ref AnalyticsAlertsTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyticsAlertsTopicArn'
+
+  AnalyticsDLQArn:
+    Description: 'Analytics Dead Letter Queue ARN'
+    Value: !GetAtt AnalyticsDLQ.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyticsDLQArn'
+
+  CallAnalyticsRuleArn:
+    Description: 'Call Analytics EventBridge Rule ARN'
+    Value: !GetAtt CallAnalyticsRule.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CallAnalyticsRuleArn'
+
+  TemplateUsageRuleArn:
+    Description: 'Template Usage EventBridge Rule ARN'
+    Value: !GetAtt TemplateUsageRule.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TemplateUsageRuleArn'

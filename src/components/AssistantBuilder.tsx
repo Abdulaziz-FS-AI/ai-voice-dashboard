@@ -17,13 +17,20 @@ interface PromptSegment {
   placeholder?: string;
   required?: boolean;
   validation?: string;
+  helpText?: string;
+  businessPurpose?: string;
 }
 
-interface PromptTemplate {
+interface EnhancedPromptTemplate {
   id: string;
   name: string;
   category: string;
   description: string;
+  complexity?: 'basic' | 'intermediate' | 'advanced';
+  industry?: string[];
+  businessObjectives?: string[];
+  useCase?: string;
+  estimatedSetupTime?: number;
   segments: PromptSegment[];
   voiceDefaults: {
     provider: string;
@@ -31,6 +38,21 @@ interface PromptTemplate {
     speed: number;
     stability: number;
   };
+  createdAt: string;
+  usageCount?: number;
+  averageRating?: number;
+  tags?: string[];
+}
+
+// Keep backward compatibility
+interface PromptTemplate extends EnhancedPromptTemplate {}
+
+interface TemplateSearchFilters {
+  industry?: string[];
+  category?: string[];
+  complexity?: string[];
+  tags?: string[];
+  minRating?: number;
 }
 
 interface AssistantConfig {
@@ -65,6 +87,8 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
   const [error, setError] = useState('');
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'creating' | 'deploying' | 'success' | 'error'>('idle');
   const [createdAssistant, setCreatedAssistant] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState<TemplateSearchFilters>({});
 
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://your-api-gateway-url.com';
@@ -130,6 +154,70 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
       }
     }).filter(content => content.trim().length > 0).join('\n\n');
   };
+
+  const filterTemplates = (templates: PromptTemplate[]): PromptTemplate[] => {
+    return templates.filter(template => {
+      // Search term filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = 
+          template.name.toLowerCase().includes(searchLower) ||
+          template.description.toLowerCase().includes(searchLower) ||
+          template.category.toLowerCase().includes(searchLower) ||
+          (template.industry && template.industry.some(ind => ind.toLowerCase().includes(searchLower))) ||
+          (template.businessObjectives && template.businessObjectives.some(obj => obj.toLowerCase().includes(searchLower))) ||
+          (template.tags && template.tags.some(tag => tag.toLowerCase().includes(searchLower)));
+        
+        if (!matchesSearch) return false;
+      }
+
+      // Industry filter
+      if (filters.industry && filters.industry.length > 0) {
+        if (!template.industry || !template.industry.some(ind => filters.industry!.includes(ind))) {
+          return false;
+        }
+      }
+
+      // Category filter
+      if (filters.category && filters.category.length > 0) {
+        if (!filters.category.includes(template.category)) {
+          return false;
+        }
+      }
+
+      // Complexity filter
+      if (filters.complexity && filters.complexity.length > 0) {
+        if (!filters.complexity.includes(template.complexity || 'basic')) {
+          return false;
+        }
+      }
+
+      // Rating filter
+      if (filters.minRating && template.averageRating) {
+        if (template.averageRating < filters.minRating) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  const getUniqueValues = (key: keyof PromptTemplate): string[] => {
+    const values = new Set<string>();
+    templates.forEach(template => {
+      if (key === 'industry' && template.industry) {
+        template.industry.forEach(ind => values.add(ind));
+      } else if (key === 'category') {
+        values.add(template.category);
+      } else if (key === 'complexity') {
+        values.add(template.complexity || 'basic');
+      }
+    });
+    return Array.from(values).sort();
+  };
+
+  const filteredTemplates = filterTemplates(templates);
 
   const handleTemplateSelect = (template: PromptTemplate) => {
     setSelectedTemplate(template);
@@ -290,7 +378,7 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
   const renderTemplateSelection = () => (
     <div className="template-selection">
       <h2>Choose Your Assistant Template</h2>
-      <p>Select a pre-built template that matches your business needs. You'll customize it in the next step.</p>
+      <p>Select a pre-built template that matches your business needs. Each template is optimized for specific industries and objectives.</p>
       
       {error && (
         <div className="error-banner">
@@ -309,30 +397,187 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
       
       {templates.length === 0 && !error && (
         <div className="loading-message">
-          Loading templates...
+          Loading strategic templates...
+        </div>
+      )}
+      
+      {templates.length > 0 && (
+        <div className="template-filters">
+          <div className="search-bar">
+            <input
+              type="text"
+              placeholder="Search templates by name, industry, or objectives..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+          </div>
+          
+          <div className="filter-controls">
+            <div className="filter-group">
+              <label>Industry:</label>
+              <select
+                value={filters.industry?.[0] || ''}
+                onChange={(e) => setFilters(prev => ({
+                  ...prev,
+                  industry: e.target.value ? [e.target.value] : undefined
+                }))}
+                className="filter-select"
+              >
+                <option value="">All Industries</option>
+                {getUniqueValues('industry').map(industry => (
+                  <option key={industry} value={industry}>{industry}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="filter-group">
+              <label>Complexity:</label>
+              <select
+                value={filters.complexity?.[0] || ''}
+                onChange={(e) => setFilters(prev => ({
+                  ...prev,
+                  complexity: e.target.value ? [e.target.value] : undefined
+                }))}
+                className="filter-select"
+              >
+                <option value="">All Levels</option>
+                {getUniqueValues('complexity').map(complexity => (
+                  <option key={complexity} value={complexity}>
+                    {complexity.charAt(0).toUpperCase() + complexity.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="filter-group">
+              <label>Category:</label>
+              <select
+                value={filters.category?.[0] || ''}
+                onChange={(e) => setFilters(prev => ({
+                  ...prev,
+                  category: e.target.value ? [e.target.value] : undefined
+                }))}
+                className="filter-select"
+              >
+                <option value="">All Categories</option>
+                {getUniqueValues('category').map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+            
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setFilters({});
+              }}
+              className="clear-filters-btn"
+            >
+              Clear Filters
+            </button>
+          </div>
+          
+          <div className="results-summary">
+            Showing {filteredTemplates.length} of {templates.length} templates
+          </div>
         </div>
       )}
       
       <div className="templates-grid">
-        {templates.map(template => (
+        {filteredTemplates.map(template => (
           <div
             key={template.id}
-            className={`template-card ${selectedTemplate?.id === template.id ? 'selected' : ''}`}
+            className={`template-card ${selectedTemplate?.id === template.id ? 'selected' : ''} complexity-${template.complexity || 'basic'}`}
             onClick={() => handleTemplateSelect(template)}
           >
             <div className="template-header">
               <h3>{template.name}</h3>
-              <span className="template-category">{template.category}</span>
+              <div className="template-badges">
+                <span className={`complexity-badge ${template.complexity || 'basic'}`}>
+                  {(template.complexity || 'basic').toUpperCase()}
+                </span>
+                <span className="category-badge">{template.category}</span>
+              </div>
             </div>
+            
             <p className="template-description">{template.description}</p>
-            <div className="template-features">
-              <div className="feature-count">
-                {template.segments.filter(s => s.type === 'dynamic').length} customizable fields
+            
+            {template.industry && template.industry.length > 0 && (
+              <div className="template-industries">
+                <strong>Industries:</strong>
+                <div className="industry-tags">
+                  {template.industry.slice(0, 3).map((industry, index) => (
+                    <span key={index} className="industry-tag">{industry}</span>
+                  ))}
+                  {template.industry.length > 3 && (
+                    <span className="industry-tag more">+{template.industry.length - 3}</span>
+                  )}
+                </div>
               </div>
-              <div className="voice-provider">
-                Voice: {template.voiceDefaults.provider}
+            )}
+            
+            {template.businessObjectives && template.businessObjectives.length > 0 && (
+              <div className="template-objectives">
+                <strong>Key Objectives:</strong>
+                <ul className="objectives-list">
+                  {template.businessObjectives.slice(0, 2).map((objective, index) => (
+                    <li key={index}>{objective}</li>
+                  ))}
+                </ul>
+                {template.businessObjectives.length > 2 && (
+                  <span className="objectives-more">+{template.businessObjectives.length - 2} more</span>
+                )}
               </div>
+            )}
+            
+            <div className="template-stats">
+              <div className="stat-item">
+                <span className="stat-label">Setup Time:</span>
+                <span className="stat-value">{template.estimatedSetupTime || 5} min</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">Customizable:</span>
+                <span className="stat-value">{template.segments.filter(s => s.type === 'dynamic').length} fields</span>
+              </div>
+              {template.averageRating && (
+                <div className="stat-item">
+                  <span className="stat-label">Rating:</span>
+                  <div className="rating-display">
+                    <span className="rating-stars">
+                      {'★'.repeat(Math.floor(template.averageRating))}
+                      {'☆'.repeat(5 - Math.floor(template.averageRating))}
+                    </span>
+                    <span className="rating-number">({template.averageRating.toFixed(1)})</span>
+                  </div>
+                </div>
+              )}
+              {template.usageCount && (
+                <div className="stat-item">
+                  <span className="stat-label">Used:</span>
+                  <span className="stat-value">{template.usageCount}x</span>
+                </div>
+              )}
             </div>
+            
+            <div className="template-features">
+              <div className="voice-provider">
+                <strong>Voice:</strong> {template.voiceDefaults.provider}
+              </div>
+              {template.useCase && (
+                <div className="use-case">
+                  <strong>Best for:</strong> {template.useCase}
+                </div>
+              )}
+            </div>
+            
+            {template.tags && template.tags.length > 0 && (
+              <div className="template-tags">
+                {template.tags.slice(0, 4).map((tag, index) => (
+                  <span key={index} className="template-tag">{tag}</span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

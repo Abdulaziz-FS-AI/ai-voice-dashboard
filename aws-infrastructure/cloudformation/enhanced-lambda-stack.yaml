@@ -1,0 +1,543 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Enhanced Lambda Functions for Voice Matrix with Advanced Template System'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  ProjectName:
+    Type: String
+    Default: 'VoiceMatrix'
+    Description: 'Project name'
+
+  DynamoDBStackName:
+    Type: String
+    Description: 'Name of the DynamoDB stack to reference'
+    Default: 'VoiceMatrix-Enhanced-Infrastructure-dev'
+
+  VAPISecretName:
+    Type: String
+    Description: 'Name of the VAPI API key secret in Secrets Manager'
+    Default: 'VoiceMatrix/vapi-api-key'
+
+  JWTSecret:
+    Type: String
+    Description: 'JWT secret for authentication'
+    Default: 'voice-matrix-jwt-secret-2024'
+    NoEcho: true
+
+Resources:
+  # ============================================================================
+  # IAM ROLES AND POLICIES
+  # ============================================================================
+  EnhancedLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-Enhanced-Lambda-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: DynamoDBFullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-PromptTemplatesTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-UserSessionsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-PromptTemplatesTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: 
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${VAPISecretName}*'
+                  - !Ref JWTSecretManager
+        - PolicyName: EventBridgeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # SECRETS MANAGER
+  # ============================================================================
+  JWTSecretManager:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}/jwt-secret/${Environment}'
+      Description: 'JWT secret for authentication'
+      SecretString: !Sub |
+        {
+          "jwtSecret": "${JWTSecret}"
+        }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # LAMBDA LAYER FOR SHARED DEPENDENCIES
+  # ============================================================================
+  SharedDependenciesLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub '${ProjectName}-shared-dependencies-${Environment}'
+      Description: 'Shared dependencies for Voice Matrix Lambda functions'
+      Content:
+        ZipFile: |
+          # Placeholder for shared dependencies layer
+          # In production, this would contain node_modules with:
+          # - AWS SDK v3
+          # - uuid
+          # - jsonwebtoken
+          # - axios
+          # And other shared dependencies
+      CompatibleRuntimes:
+        - nodejs18.x
+      CompatibleArchitectures:
+        - x86_64
+
+  # ============================================================================
+  # ENHANCED ASSISTANTS LAMBDA FUNCTION
+  # ============================================================================
+  EnhancedAssistantsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-Enhanced-Assistants-${Environment}'
+      Runtime: nodejs18.x
+      Handler: assistants.handler
+      Role: !GetAtt EnhancedLambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 1024
+      Layers:
+        - !Ref SharedDependenciesLayer
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          PROJECT_NAME: !Ref ProjectName
+          REGION: !Ref AWS::Region
+          JWT_SECRET_ARN: !Ref JWTSecretManager
+          USERS_TABLE: !Sub '${ProjectName}-Users-${Environment}'
+          ASSISTANTS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+          PROMPT_TEMPLATES_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-PromptTemplatesTable'
+          TEMPLATE_ANALYTICS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+          VAPI_SECRET_NAME: !Ref VAPISecretName
+          NODE_ENV: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Enhanced assistants handler - deploy actual code');
+            return {
+              statusCode: 200,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+              },
+              body: JSON.stringify({ message: 'Enhanced assistants API ready' })
+            };
+          };
+      TracingConfig:
+        Mode: Active
+      DeadLetterConfig:
+        TargetArn: !GetAtt AssistantsDLQ.Arn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # AUTH LAMBDA FUNCTION
+  # ============================================================================
+  AuthLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-Auth-${Environment}'
+      Runtime: nodejs18.x
+      Handler: auth.handler
+      Role: !GetAtt EnhancedLambdaExecutionRole.Arn
+      Timeout: 15
+      MemorySize: 512
+      Layers:
+        - !Ref SharedDependenciesLayer
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          JWT_SECRET_ARN: !Ref JWTSecretManager
+          USERS_TABLE: !Sub '${ProjectName}-Users-${Environment}'
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Auth handler - deploy actual code');
+            return {
+              statusCode: 200,
+              headers: { 'Access-Control-Allow-Origin': '*' },
+              body: JSON.stringify({ message: 'Auth API ready' })
+            };
+          };
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # LAMBDA FUNCTION VERSIONS AND ALIASES
+  # ============================================================================
+  AssistantsLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref EnhancedAssistantsLambda
+      Description: !Sub 'Enhanced assistants version for ${Environment}'
+
+  AssistantsLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      AliasName: !Ref Environment
+      FunctionName: !Ref EnhancedAssistantsLambda
+      FunctionVersion: !GetAtt AssistantsLambdaVersion.Version
+
+  AuthLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref AuthLambda
+      Description: !Sub 'Auth version for ${Environment}'
+
+  AuthLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      AliasName: !Ref Environment
+      FunctionName: !Ref AuthLambda
+      FunctionVersion: !GetAtt AuthLambdaVersion.Version
+
+  # ============================================================================
+  # API GATEWAY
+  # ============================================================================
+  EnhancedAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub '${ProjectName}-Enhanced-API-${Environment}'
+      Description: 'Enhanced API for Voice Matrix with advanced template system'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Policy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 'execute-api:Invoke'
+            Resource: '*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # API Gateway resources and methods
+  AuthResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ParentId: !GetAtt EnhancedAPI.RootResourceId
+      PathPart: auth
+
+  AssistantsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ParentId: !GetAtt EnhancedAPI.RootResourceId
+      PathPart: assistants
+
+  AssistantsProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ParentId: !Ref AssistantsResource
+      PathPart: '{proxy+}'
+
+  # CORS OPTIONS methods
+  AuthOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ResourceId: !Ref AuthResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,POST'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+
+  AssistantsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ResourceId: !Ref AssistantsProxyResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+
+  # Auth POST method
+  AuthPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ResourceId: !Ref AuthResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaAlias}/invocations'
+
+  # Assistants ANY method (proxy)
+  AssistantsProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      ResourceId: !Ref AssistantsProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AssistantsLambdaAlias}/invocations'
+
+  # Lambda permissions
+  AuthLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AuthLambdaAlias
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub '${EnhancedAPI}/*/POST/auth'
+
+  AssistantsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AssistantsLambdaAlias
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub '${EnhancedAPI}/*/*/assistants/*'
+
+  # API Gateway deployment
+  EnhancedAPIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - AuthOptionsMethod
+      - AuthPostMethod
+      - AssistantsOptionsMethod
+      - AssistantsProxyMethod
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      Description: !Sub 'Enhanced API deployment for ${Environment}'
+
+  # API Gateway stage
+  EnhancedAPIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref EnhancedAPI
+      DeploymentId: !Ref EnhancedAPIDeployment
+      StageName: !Ref Environment
+      Description: !Sub 'Enhanced API stage for ${Environment}'
+      MethodSettings:
+        - ResourcePath: '/*/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+          ThrottlingBurstLimit: 1000
+          ThrottlingRateLimit: 500
+      TracingConfig:
+        TracingEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # MONITORING AND ALERTING
+  # ============================================================================
+  AssistantsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-Enhanced-Assistants-DLQ-${Environment}'
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # CloudWatch alarms
+  AssistantsErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-Enhanced-Assistants-Errors-${Environment}'
+      AlarmDescription: 'Monitor enhanced assistants function errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EnhancedAssistantsLambda
+      AlarmActions:
+        - !Ref LambdaAlertsTopic
+
+  AssistantsDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-Enhanced-Assistants-Duration-${Environment}'
+      AlarmDescription: 'Monitor enhanced assistants function duration'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 25000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EnhancedAssistantsLambda
+      AlarmActions:
+        - !Ref LambdaAlertsTopic
+
+  LambdaAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-Enhanced-Lambda-Alerts-${Environment}'
+      DisplayName: 'Voice Matrix Enhanced Lambda Alerts'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  EnhancedAPIURL:
+    Description: 'Enhanced API Gateway URL'
+    Value: !Sub 'https://${EnhancedAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-EnhancedAPIURL'
+
+  AssistantsLambdaArn:
+    Description: 'Enhanced Assistants Lambda Function ARN'
+    Value: !GetAtt EnhancedAssistantsLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AssistantsLambdaArn'
+
+  AuthLambdaArn:
+    Description: 'Auth Lambda Function ARN'
+    Value: !GetAtt AuthLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AuthLambdaArn'
+
+  APIGatewayId:
+    Description: 'API Gateway ID'
+    Value: !Ref EnhancedAPI
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGatewayId'
+
+  LambdaExecutionRoleArn:
+    Description: 'Lambda Execution Role ARN'
+    Value: !GetAtt EnhancedLambdaExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaExecutionRoleArn'

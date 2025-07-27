@@ -1,0 +1,435 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VAPI Webhook Infrastructure for Voice Matrix - Processes call data in real-time'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  ProjectName:
+    Type: String
+    Default: 'VoiceMatrix'
+    Description: 'Project name'
+
+  DynamoDBStackName:
+    Type: String
+    Description: 'Name of the DynamoDB stack to import table names from'
+    Default: 'VoiceMatrix-Enhanced-Infrastructure-dev'
+
+  WebhookSecret:
+    Type: String
+    Description: 'Secret key for VAPI webhook verification'
+    Default: 'voice-matrix-webhook-secret-2024'
+    NoEcho: true
+
+Resources:
+  # ============================================================================
+  # IAM ROLE FOR WEBHOOK LAMBDA
+  # ============================================================================
+  VAPIWebhookLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-VAPI-Webhook-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-CallLogsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+                  - !Sub 
+                    - 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*'
+                    - TableName: !ImportValue
+                        Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+        - PolicyName: EventBridgeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default'
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref VAPIWebhookSecretManager
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # SECRETS MANAGER FOR WEBHOOK SECRET
+  # ============================================================================
+  VAPIWebhookSecretManager:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}/vapi-webhook-secret/${Environment}'
+      Description: 'VAPI webhook verification secret'
+      SecretString: !Sub |
+        {
+          "webhookSecret": "${WebhookSecret}"
+        }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # LAMBDA FUNCTION FOR VAPI WEBHOOKS
+  # ============================================================================
+  VAPIWebhookLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-VAPI-Webhook-${Environment}'
+      Runtime: nodejs18.x
+      Handler: vapi-webhooks.handler
+      Role: !GetAtt VAPIWebhookLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          PROJECT_NAME: !Ref ProjectName
+          REGION: !Ref AWS::Region
+          CALL_LOGS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-CallLogsTable'
+          USER_ASSISTANTS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-UserAssistantsTable'
+          TEMPLATE_ANALYTICS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+          VAPI_WEBHOOK_SECRET: !Ref VAPIWebhookSecretManager
+          NODE_ENV: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Placeholder webhook handler - deploy actual code');
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Webhook received' })
+            };
+          };
+      DeadLetterConfig:
+        TargetArn: !GetAtt WebhookDLQ.Arn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # LAMBDA FUNCTION VERSION AND ALIAS
+  # ============================================================================
+  VAPIWebhookLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref VAPIWebhookLambda
+      Description: !Sub 'Version for ${Environment} environment'
+
+  VAPIWebhookLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      AliasName: !Ref Environment
+      FunctionName: !Ref VAPIWebhookLambda
+      FunctionVersion: !GetAtt VAPIWebhookLambdaVersion.Version
+
+  # ============================================================================
+  # API GATEWAY FOR WEBHOOK ENDPOINT
+  # ============================================================================
+  VAPIWebhookAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub '${ProjectName}-VAPI-Webhook-API-${Environment}'
+      Description: 'API Gateway for VAPI webhook endpoints'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      ApiKeySourceType: HEADER
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Webhook resource
+  WebhookResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref VAPIWebhookAPI
+      ParentId: !GetAtt VAPIWebhookAPI.RootResourceId
+      PathPart: webhook
+
+  # OPTIONS method for CORS
+  WebhookOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref VAPIWebhookAPI
+      ResourceId: !Ref WebhookResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-VAPI-Signature'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,POST'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+
+  # POST method for webhook
+  WebhookPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref VAPIWebhookAPI
+      ResourceId: !Ref WebhookResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VAPIWebhookLambdaAlias}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: Empty
+
+  # Lambda permission for API Gateway
+  VAPIWebhookLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VAPIWebhookLambdaAlias
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub '${VAPIWebhookAPI}/*/POST/webhook'
+
+  # API Gateway deployment
+  VAPIWebhookAPIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - WebhookOptionsMethod
+      - WebhookPostMethod
+    Properties:
+      RestApiId: !Ref VAPIWebhookAPI
+      Description: !Sub 'Deployment for ${Environment} environment'
+
+  # API Gateway stage
+  VAPIWebhookAPIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref VAPIWebhookAPI
+      DeploymentId: !Ref VAPIWebhookAPIDeployment
+      StageName: !Ref Environment
+      Description: !Sub 'Stage for ${Environment} environment'
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+      TracingConfig:
+        TracingEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # DEAD LETTER QUEUE AND MONITORING
+  # ============================================================================
+  WebhookDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-VAPI-Webhook-DLQ-${Environment}'
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # CloudWatch alarms
+  WebhookErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-VAPI-Webhook-Errors-${Environment}'
+      AlarmDescription: 'Monitor webhook function errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref VAPIWebhookLambda
+      AlarmActions:
+        - !Ref WebhookAlertsTopic
+
+  WebhookDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-VAPI-Webhook-Duration-${Environment}'
+      AlarmDescription: 'Monitor webhook function duration'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 20000  # 20 seconds
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref VAPIWebhookLambda
+      AlarmActions:
+        - !Ref WebhookAlertsTopic
+
+  WebhookAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-VAPI-Webhook-Alerts-${Environment}'
+      DisplayName: 'Voice Matrix VAPI Webhook Alerts'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================================
+  # EVENTBRIDGE RULE FOR ANALYTICS PROCESSING
+  # ============================================================================
+  CallAnalyticsEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-Call-Analytics-Rule-${Environment}'
+      Description: 'Process call analytics events from VAPI webhooks'
+      EventPattern:
+        source:
+          - 'voice-matrix.vapi-webhooks'
+        detail-type:
+          - 'Call Analytics Event'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalyticsProcessorLambda.Arn
+          Id: 'AnalyticsProcessor'
+
+  # Analytics processor Lambda
+  AnalyticsProcessorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-Analytics-Processor-${Environment}'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt VAPIWebhookLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          TEMPLATE_ANALYTICS_TABLE: !ImportValue
+            Fn::Sub: '${DynamoDBStackName}-TemplateAnalyticsTable'
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Processing analytics event:', JSON.stringify(event, null, 2));
+            // Real-time analytics processing logic here
+            return { statusCode: 200 };
+          };
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # EventBridge permission for analytics processor
+  AnalyticsProcessorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalyticsProcessorLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CallAnalyticsEventRule.Arn
+
+Outputs:
+  WebhookAPIURL:
+    Description: 'VAPI Webhook API Gateway URL'
+    Value: !Sub 'https://${VAPIWebhookAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/webhook'
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookURL'
+
+  WebhookAPIId:
+    Description: 'VAPI Webhook API Gateway ID'
+    Value: !Ref VAPIWebhookAPI
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookAPIId'
+
+  VAPIWebhookLambdaArn:
+    Description: 'VAPI Webhook Lambda Function ARN'
+    Value: !GetAtt VAPIWebhookLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookLambdaArn'
+
+  WebhookSecretArn:
+    Description: 'VAPI Webhook Secret ARN'
+    Value: !Ref VAPIWebhookSecretManager
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookSecretArn'
+
+  WebhookDLQArn:
+    Description: 'Webhook Dead Letter Queue ARN'
+    Value: !GetAtt WebhookDLQ.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookDLQArn'
+
+  AlertsTopicArn:
+    Description: 'Webhook Alerts SNS Topic ARN'
+    Value: !Ref WebhookAlertsTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-AlertsTopicArn'
