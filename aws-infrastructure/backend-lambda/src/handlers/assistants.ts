@@ -1057,3 +1057,70 @@ async function handleValidateTemplate(event: APIGatewayProxyEvent): Promise<APIG
     };
   }
 }
+
+// MISSING FUNCTION - Add the template handler that was missing
+async function handleGetPromptTemplates(): Promise<APIGatewayProxyResult> {
+  try {
+    console.log('Fetching all prompt templates');
+    
+    // Combine strategic templates into a single array
+    const allTemplates = [...STRATEGIC_TEMPLATES, ...STRATEGIC_TEMPLATES_CONTINUED];
+    
+    // Format templates for frontend consumption
+    const formattedTemplates = allTemplates.map(template => ({
+      id: template.id,
+      name: template.name,
+      category: template.category.primary,
+      description: template.documentation.description,
+      complexity: template.complexity,
+      industry: template.industry,
+      businessObjectives: template.businessObjectives.map(obj => obj.name),
+      useCase: template.useCase.title,
+      estimatedSetupTime: template.userExperience.estimatedSetupTime,
+      segments: template.segments.map(segment => ({
+        id: segment.id,
+        type: segment.type,
+        label: segment.label,
+        content: segment.content,
+        editable: segment.editable,
+        placeholder: segment.placeholder,
+        required: segment.validation?.type === 'required',
+        validation: segment.validation?.rules?.[0]?.errorMessage,
+        helpText: segment.helpText,
+        businessPurpose: segment.businessPurpose
+      })),
+      voiceDefaults: {
+        provider: template.vapiConfiguration.voice.provider,
+        voiceId: template.vapiConfiguration.voice.voiceId,
+        speed: template.vapiConfiguration.voice.speed,
+        stability: template.vapiConfiguration.voice.stability
+      },
+      createdAt: template.metadata.createdAt,
+      usageCount: template.metadata.usage.timesUsed,
+      averageRating: template.metadata.usage.averageRating,
+      tags: template.metadata.tags
+    }));
+
+    console.log(`Returning ${formattedTemplates.length} templates`);
+    
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        templates: formattedTemplates,
+        total: formattedTemplates.length,
+        message: 'Templates loaded successfully'
+      })
+    };
+  } catch (error) {
+    console.error('Error getting prompt templates:', error);
+    return {
+      statusCode: 500,
+      headers: corsHeaders,
+      body: JSON.stringify({ 
+        error: 'Failed to load templates',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      })
+    };
+  }
+}

@@ -86,12 +86,140 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'creating' | 'deploying' | 'success' | 'error'>('idle');
+  const [retryCount, setRetryCount] = useState(0);
+  const [showRetryButton, setShowRetryButton] = useState(false);
   const [createdAssistant, setCreatedAssistant] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<TemplateSearchFilters>({});
 
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://your-api-gateway-url.com';
+
+  // Fallback templates for when API fails
+  const loadFallbackTemplates = () => {
+    console.log('Loading fallback templates');
+    const fallbackTemplates: PromptTemplate[] = [
+      {
+        id: 'fallback-lead-qualification',
+        name: 'Lead Qualification Assistant',
+        category: 'lead_qualification',
+        description: 'Qualify leads by asking about their needs, timeline, and decision-making process.',
+        complexity: 'intermediate',
+        industry: ['general', 'saas', 'professional_services'],
+        businessObjectives: ['Qualify leads', 'Schedule follow-ups', 'Collect contact information'],
+        useCase: 'Inbound lead qualification and routing',
+        estimatedSetupTime: 10,
+        segments: [
+          {
+            id: 'greeting',
+            type: 'original',
+            label: 'Greeting',
+            content: 'Hello! Thanks for your interest in our services. I\'m here to help you get started.',
+            editable: false,
+            businessPurpose: 'Establish rapport and set professional tone'
+          },
+          {
+            id: 'company_name',
+            type: 'dynamic',
+            label: 'Company Name',
+            content: '[COMPANY_NAME]',
+            editable: true,
+            placeholder: 'Enter your company name',
+            required: true,
+            businessPurpose: 'Personalize the conversation'
+          },
+          {
+            id: 'qualification_questions',
+            type: 'original',
+            label: 'Qualification Questions',
+            content: 'To better assist you, could you tell me about your current challenges with [SPECIFIC_AREA]? What timeline are you working with for implementing a solution?',
+            editable: false,
+            businessPurpose: 'Gather qualifying information'
+          },
+          {
+            id: 'specific_area',
+            type: 'dynamic',
+            label: 'Specific Area',
+            content: '[SPECIFIC_AREA]',
+            editable: true,
+            placeholder: 'e.g., customer service, sales automation',
+            required: true,
+            businessPurpose: 'Focus on relevant pain points'
+          }
+        ],
+        voiceDefaults: {
+          provider: 'elevenlabs',
+          voiceId: 'ErXwobaYiN019PkySvjV',
+          speed: 1.0,
+          stability: 0.7
+        },
+        createdAt: new Date().toISOString(),
+        usageCount: 0,
+        averageRating: 4.5,
+        tags: ['lead qualification', 'sales', 'inbound']
+      },
+      {
+        id: 'fallback-customer-support',
+        name: 'Customer Support Assistant',
+        category: 'support',
+        description: 'Handle customer inquiries and provide helpful information.',
+        complexity: 'basic',
+        industry: ['general', 'ecommerce', 'saas'],
+        businessObjectives: ['Resolve customer issues', 'Collect feedback', 'Escalate when needed'],
+        useCase: 'First-line customer support',
+        estimatedSetupTime: 5,
+        segments: [
+          {
+            id: 'support_greeting',
+            type: 'original',
+            label: 'Support Greeting',
+            content: 'Hi! I\'m here to help with any questions or issues you might have.',
+            editable: false,
+            businessPurpose: 'Provide immediate assistance'
+          },
+          {
+            id: 'product_name',
+            type: 'dynamic',
+            label: 'Product/Service Name',
+            content: '[PRODUCT_NAME]',
+            editable: true,
+            placeholder: 'Enter your product or service name',
+            required: true,
+            businessPurpose: 'Reference specific offerings'
+          },
+          {
+            id: 'support_process',
+            type: 'original',
+            label: 'Support Process',
+            content: 'What specific issue are you experiencing with [PRODUCT_NAME]? I\'ll do my best to help you resolve it quickly.',
+            editable: false,
+            businessPurpose: 'Gather issue details for resolution'
+          }
+        ],
+        voiceDefaults: {
+          provider: 'elevenlabs',
+          voiceId: 'ErXwobaYiN019PkySvjV',
+          speed: 1.0,
+          stability: 0.8
+        },
+        createdAt: new Date().toISOString(),
+        usageCount: 0,
+        averageRating: 4.3,
+        tags: ['customer support', 'help desk', 'general']
+      }
+    ];
+    
+    setTemplates(fallbackTemplates);
+    setError('Using offline templates (API unavailable)');
+    setShowRetryButton(false);
+  };
+
+  const retryFetchTemplates = () => {
+    setRetryCount(prev => prev + 1);
+    setShowRetryButton(false);
+    setError('');
+    fetchTemplates();
+  };
 
   // Load templates on component mount
   useEffect(() => {
@@ -108,6 +236,7 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
   }, [selectedTemplate, assistantConfig.dynamicSegments]);
 
   const fetchTemplates = async () => {
+    setIsLoading(true);
     try {
       console.log('Fetching templates from:', `${API_BASE_URL}/assistants/templates`);
       console.log('Using token:', token ? 'Token present' : 'No token');
@@ -130,17 +259,37 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
         if (Array.isArray(templatesArray) && templatesArray.length > 0) {
           setTemplates(templatesArray);
           setError(''); // Clear any previous errors
+          console.log(`Successfully loaded ${templatesArray.length} templates`);
         } else {
-          setError('No templates available');
+          console.warn('No templates in API response, loading fallback templates');
+          loadFallbackTemplates();
         }
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to load templates:', response.status, errorData);
-        setError(`Failed to load templates: ${response.status}`);
+        console.error('API Error:', response.status, errorData);
+        
+        // If it's a server error and we haven't retried much, offer retry
+        if (response.status >= 500 && retryCount < 2) {
+          setShowRetryButton(true);
+          setError(`Server error (${response.status}). Click retry to try again.`);
+        } else {
+          console.log('Loading fallback templates due to API error');
+          loadFallbackTemplates();
+        }
       }
     } catch (err) {
-      console.error('Error loading templates:', err);
-      setError('Network error loading templates');
+      console.error('Network error loading templates:', err);
+      
+      // For network errors, offer retry if we haven't tried too many times
+      if (retryCount < 3) {
+        setShowRetryButton(true);
+        setError('Network error. Check your connection and try again.');
+      } else {
+        console.log('Loading fallback templates due to network error');
+        loadFallbackTemplates();
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -383,15 +532,20 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
       {error && (
         <div className="error-banner">
           <div className="error-message">{error}</div>
-          <button 
-            onClick={() => {
-              setError('');
-              fetchTemplates();
-            }}
-            className="retry-button"
-          >
-            Retry Loading Templates
-          </button>
+          {showRetryButton && (
+            <button 
+              onClick={retryFetchTemplates}
+              className="retry-button"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Retrying...' : `Retry Loading Templates (${retryCount}/3)`}
+            </button>
+          )}
+          {!showRetryButton && error.includes('offline templates') && (
+            <div className="fallback-info">
+              <span>✓ Using built-in templates to continue</span>
+            </div>
+          )}
         </div>
       )}
       

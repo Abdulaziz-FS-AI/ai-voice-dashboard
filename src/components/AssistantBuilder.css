@@ -859,8 +859,7 @@
   padding: 16px;
   margin-bottom: 20px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -882,8 +881,31 @@
   transition: background 0.2s;
 }
 
-.retry-button:hover {
+.retry-button:hover:not(:disabled) {
   background: #c53030;
+}
+
+.retry-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fallback-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #38a169;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fallback-info span {
+  background: #c6f6d5;
+  color: #22543d;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid #9ae6b4;
+  font-size: 13px;
 }
 
 .loading-message {
