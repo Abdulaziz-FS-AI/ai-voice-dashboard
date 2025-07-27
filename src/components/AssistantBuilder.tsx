@@ -94,6 +94,9 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
 
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://your-api-gateway-url.com';
+  
+  // Demo mode detection
+  const isDemoMode = !user || !token || user.email?.includes('demo') || process.env.NODE_ENV === 'development';
 
   // Fallback templates for when API fails
   const loadFallbackTemplates = () => {
@@ -237,6 +240,17 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
 
   const fetchTemplates = async () => {
     setIsLoading(true);
+    
+    // In demo mode, directly load fallback templates
+    if (isDemoMode || !token) {
+      console.log('Demo mode detected - loading fallback templates directly');
+      setTimeout(() => {
+        loadFallbackTemplates();
+        setIsLoading(false);
+      }, 1000); // Simulate loading time
+      return;
+    }
+    
     try {
       console.log('Fetching templates from:', `${API_BASE_URL}/assistants/templates`);
       console.log('Using token:', token ? 'Token present' : 'No token');
@@ -431,6 +445,34 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
     setError(''); // Clear any previous errors
 
     try {
+      // Demo mode - simulate assistant creation
+      if (isDemoMode || !token) {
+        console.log('Demo mode: Simulating assistant creation');
+        
+        // Simulate API call delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        const demoAssistant = {
+          id: `demo-${Date.now()}`,
+          name: assistantConfig.name,
+          templateId: assistantConfig.templateId,
+          templateName: selectedTemplate?.name || 'Demo Template',
+          status: 'draft',
+          assembledPrompt: assemblePrompt(selectedTemplate!, assistantConfig.dynamicSegments),
+          voiceSettings: assistantConfig.voiceSettings,
+          createdAt: new Date().toISOString(),
+          demoMode: true
+        };
+        
+        console.log('Demo assistant created:', demoAssistant);
+        setCreatedAssistant(demoAssistant);
+        setCurrentStep(5);
+        setDeploymentStatus('success');
+        setError('');
+        setIsLoading(false);
+        return;
+      }
+      
       console.log('Creating assistant with config:', assistantConfig);
       
       const response = await fetch(`${API_BASE_URL}/assistants/create`, {
@@ -472,6 +514,31 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
     setDeploymentStatus('deploying');
 
     try {
+      // Demo mode - simulate deployment
+      if (isDemoMode || !token || createdAssistant.demoMode) {
+        console.log('Demo mode: Simulating VAPI deployment');
+        
+        // Simulate deployment delay
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Update assistant with demo deployment info
+        const deployedAssistant = {
+          ...createdAssistant,
+          vapiId: `vapi-demo-${Date.now()}`,
+          phoneNumber: '+1-555-DEMO-AI',
+          status: 'deployed',
+          deployedAt: new Date().toISOString(),
+          demoMode: true
+        };
+        
+        console.log('Demo assistant deployed:', deployedAssistant);
+        setCreatedAssistant(deployedAssistant);
+        setDeploymentStatus('success');
+        setError('');
+        setIsLoading(false);
+        return;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/assistants/deploy`, {
         method: 'POST',
         headers: {
@@ -931,13 +998,18 @@ const AssistantBuilder: React.FC<AssistantBuilderProps> = ({ user, token, onLogo
           <div className="header-logo">
             <div className="logo-icon">🎙️</div>
             <span className="logo-text">Voice Matrix</span>
+            {isDemoMode && (
+              <div className="demo-indicator">
+                🎯 DEMO MODE
+              </div>
+            )}
           </div>
           <div className="header-actions">
-            <button onClick={() => navigate('/dashboard')} className="back-button">
-              ← Back to Dashboard
+            <button onClick={() => navigate(isDemoMode ? '/' : '/dashboard')} className="back-button">
+              ← {isDemoMode ? 'Back to Home' : 'Back to Dashboard'}
             </button>
             <button onClick={onLogout} className="logout-btn">
-              Logout
+              {isDemoMode ? 'Exit Demo' : 'Logout'}
             </button>
           </div>
         </div>

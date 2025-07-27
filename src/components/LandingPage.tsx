@@ -51,12 +51,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onTestLogin }) 
                 </div>
               </div>
               <div className="secondary-actions">
-                <button className="cta-secondary">
-                  See Live Demo
+                <button className="cta-secondary" onClick={() => window.location.href = '/demo'}>
+                  🎯 Try Demo (No Signup)
                   <span className="play-icon">▶</span>
                 </button>
                 <button className="cta-test" onClick={onTestLogin}>
-                  🎯 Try Now (PIN: 123456)
+                  🔑 Full Access (PIN: 123456)
                 </button>
               </div>
             </div>

@@ -165,6 +165,18 @@ const App: React.FC = () => {
             }
           />
           
+          {/* Demo route - no authentication required */}
+          <Route
+            path="/demo"
+            element={
+              <AssistantBuilder 
+                user={{ userId: 'demo', email: 'demo@example.com', role: 'demo' }} 
+                token="demo-token" 
+                onLogout={() => window.location.href = '/'} 
+              />
+            }
+          />
+          
           <Route
             path="/analytics"
             element={
